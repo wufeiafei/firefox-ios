@@ -39,3 +39,4 @@ MozBuildID.xcconfig
 
 # Python.
 *.pyc
+python-env/
