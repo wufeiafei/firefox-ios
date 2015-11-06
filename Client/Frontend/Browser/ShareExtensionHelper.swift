@@ -95,14 +95,13 @@ private extension ShareExtensionHelper {
         if (!ShareExtensionHelper.isPasswordManagerAvailable) {
             return false
         }
-        let isOnePassword = OnePasswordExtension.sharedExtension().isOnePasswordExtensionActivityType(activityType)
-
-        // If your extension's bundle identifier contains "password"
-        let isPasswordManager = activityType!.rangeOfString("pass") != nil
-
+        // Covers the most cases, such as pwsafe and 1Password.
+        // com.agilebits.onepassword-ios.extension
+        // com.app77.ios.pwsafe2.find-login-action-password-actionExtension
         // If your extension's bundle identifier does not contain "password", simply submit a pull request by adding your bundle idenfidier.
-        let isAnotherPasswordManager = (activityType == "bundle.identifier.for.another.password.manager")
-        return isOnePassword || isPasswordManager || isAnotherPasswordManager
+        return (activityType!.rangeOfString("password") != nil)
+            || (activityType == "com.lastpass.ilastpass.LastPassExt")
+
     }
 
     func findLoginExtensionItem() {
