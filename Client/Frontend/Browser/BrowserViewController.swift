@@ -1184,6 +1184,8 @@ extension BrowserViewController: BrowserDelegate {
         let sessionRestoreHelper = SessionRestoreHelper(browser: browser)
         sessionRestoreHelper.delegate = self
         browser.addHelper(sessionRestoreHelper, name: SessionRestoreHelper.name())
+
+        browser.addHelper(SpotlightHelper(), name: SpotlightHelper.name())
     }
 
     func browser(browser: Browser, willDeleteWebView webView: WKWebView) {
@@ -1665,6 +1667,19 @@ extension BrowserViewController: WKNavigationDelegate {
         }
         info["isPrivate"] = tab.isPrivate
         notificationCenter.postNotificationName(NotificationOnLocationChange, object: self, userInfo: info)
+        if #available(iOS 9.0, *) {
+            let spotlightHelper = tab.getHelper(name: SpotlightHelper.name()) as! SpotlightHelper
+            let activity = spotlightHelper.createUserActivity()
+            activity.title = info["title"] as? String
+            activity.webpageURL = info["url"] as? NSURL
+            activity.eligibleForSearch = true
+        //let keywords = activity.title?.componentsSeparatedByString(" ") ?? []
+//            activity.keywords = Set(keywords)
+//            activity.userInfo = ["Search" : ["Icecream" , "Nuts", "Biscuits"]]
+            log.info("keywords: \(activity.title)")
+            activity.becomeCurrent()
+        }
+
     }
 }
 
