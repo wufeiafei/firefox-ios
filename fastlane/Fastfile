@@ -35,23 +35,24 @@ platform :ios do
 
     # create a name for this build
     ENV["DATESTAMP"] = Time.now.utc.iso8601.gsub(/\W/, '')
-    ENV["BUILD_NAME"] = "firefox-ios-#{lane_context[SharedValues::LANE_NAME].gsub!(' ','-')}-#{ENV["APP_VERSION"]}(#{ENV["BUILD_VERSION"]})-#{ENV["DATESTAMP"]}"
+    ENV["BRANCH_NAME"] = "firefox-ios-#{lane_context[SharedValues::LANE_NAME].gsub!(' ','-')}-#{ENV["APP_VERSION"]}(#{ENV["BUILD_VERSION"]})"
+    ENV["BUILD_NAME"] = "#{ENV["BRANCH_NAME"]}-#{ENV["DATESTAMP"]}"
     puts ENV["BUILD_NAME"]
 
     # checkout a new branch for build
     checkout_git_branch(
       base_branch: opts[:branch],
-      branch: ENV["BUILD_NAME"]
+      branch: ENV["BRANCH_NAME"]
     )
 
     # import locales
-    sh("./scripts/localise.sh")
+    sh("../scripts/localise.sh")
 
     # make builds & prov profile dirs
     sh("./scripts/mkdirs.sh")
 
     increment_build_number(build_number: ENV["BUILD_VERSION"])
-    increment_version_number(version_number: ENV["APP_VERSION"])
+    increment_version_number(version_number: ENV["APP_VERSION"])  
   end
 
   desc "Builds an Aurora build for l10n"
@@ -73,6 +74,9 @@ platform :ios do
       output_directory: "./builds/",
       output_name: "#{ENV["BUILD_NAME"]}.ipa",
       sdk: "iphoneos",
+      clean: true,
+      export_method: "enterprise",
+      export_team_id: ENV["SIGH_TEAM_ID"],
       include_symbols: true,
       include_bitcode: false)
 
@@ -87,9 +91,10 @@ platform :ios do
   after_all do |lane|
     # This block is called, only if the executed lane was successful
     
-    # slack(
-    #   message: "Successfully deployed new App Update."
-    # )
+    #commit_version_bump(
+    #  message: 'Version Bump',                    # create a commit with a custom message
+    #  xcodeproj: 'Client.xcodeproj', # optional, if you have multiple Xcode project files, you must specify your main project here
+    #) 
   end
 
   error do |lane, exception|

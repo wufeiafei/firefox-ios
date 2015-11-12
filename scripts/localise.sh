@@ -1,6 +1,4 @@
-echo "changing directories"
 cd ..
-
 echo "Activating virtualenv"
 # create/activate virtualenv
 if [ -d python-env ]; then
@@ -17,9 +15,12 @@ fi
 # Import locales
 #
 echo "Importing Locales"
-./scripts/import-locales.sh || exit 1
+scripts/import-locales.sh --only-complete || exit 1
 
 echo "Deactivating virtualenv"
 deactivate
+
+git add firefox-ios-l10n Client/*.lproj Extensions/SendTo/*.lproj Extensions/ViewLater/*.lproj Extensions/ShareTo/*.lproj Client.xcodeproj/project.pbxproj || exit 1
+git commit -m 'Import localized files' || exit 1
 
 cd fastlane

@@ -5,11 +5,11 @@ if [ ! -d Client.xcodeproj ]; then
   exit 1
 fi
 
-if [ -d "firefox-ios-l10n" ]; then
+if [ -d firefox-ios-l10n ]; then
   cd firefox-ios-l10n
   svn up || exit 1
   cd ..
-else
+else 
   svn co --non-interactive --trust-server-cert https://svn.mozilla.org/projects/l10n-misc/trunk/firefox-ios firefox-ios-l10n || exit 1
 fi
 
