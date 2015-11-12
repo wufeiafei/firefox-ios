@@ -38,6 +38,7 @@ platform :ios do
     ENV["BRANCH_NAME"] = "firefox-ios-#{lane_context[SharedValues::LANE_NAME].gsub!(' ','-')}-#{ENV["APP_VERSION"]}(#{ENV["BUILD_VERSION"]})"
     ENV["BUILD_NAME"] = "#{ENV["BRANCH_NAME"]}-#{ENV["DATESTAMP"]}"
     puts ENV["BUILD_NAME"]
+    ENV["SRCROOT"] = Dir.pwd
 
     # checkout a new branch for build
     checkout_git_branch(
@@ -53,7 +54,7 @@ platform :ios do
 
     increment_build_number(build_number: ENV["BUILD_VERSION"],
     xcodeproj: 'Client.xcodeproj')
-    
+
     increment_version_number(version_number: ENV["APP_VERSION"],
     xcodeproj: 'Client.xcodeproj') 
 
