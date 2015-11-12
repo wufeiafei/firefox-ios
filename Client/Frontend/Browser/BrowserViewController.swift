@@ -1185,7 +1185,11 @@ extension BrowserViewController: BrowserDelegate {
         sessionRestoreHelper.delegate = self
         browser.addHelper(sessionRestoreHelper, name: SessionRestoreHelper.name())
 
-        browser.addHelper(SpotlightHelper(), name: SpotlightHelper.name())
+        let openURL = {(url: NSURL) -> Void in
+            log.info("Opening \(url)")
+            self.tabManager.addTab(NSURLRequest(URL: url))
+        }
+        browser.addHelper(SpotlightHelper(createNewTab: openURL), name: SpotlightHelper.name())
     }
 
     func browser(browser: Browser, willDeleteWebView webView: WKWebView) {
@@ -1669,15 +1673,7 @@ extension BrowserViewController: WKNavigationDelegate {
         notificationCenter.postNotificationName(NotificationOnLocationChange, object: self, userInfo: info)
         if #available(iOS 9.0, *) {
             let spotlightHelper = tab.getHelper(name: SpotlightHelper.name()) as! SpotlightHelper
-            let activity = spotlightHelper.createUserActivity()
-            activity.title = info["title"] as? String
-            activity.webpageURL = info["url"] as? NSURL
-            activity.eligibleForSearch = true
-        //let keywords = activity.title?.componentsSeparatedByString(" ") ?? []
-//            activity.keywords = Set(keywords)
-//            activity.userInfo = ["Search" : ["Icecream" , "Nuts", "Biscuits"]]
-            log.info("keywords: \(activity.title)")
-            activity.becomeCurrent()
+            spotlightHelper.updateIndexWith(info)
         }
 
     }
