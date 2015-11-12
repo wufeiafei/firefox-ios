@@ -12,11 +12,11 @@
 #
 which -s xcode-select
 if [[ $? != 0 ]] ; then
-	print "Installing XCode Command Line Tools"
+	echo "Installing XCode Command Line Tools"
 	# Install XCode Command Line Tools
 	xcode-select --install
 else
-	print "XCode Command Line Tools already installed"
+	echo "XCode Command Line Tools already installed"
 fi
 
 #
@@ -28,8 +28,7 @@ if [[ $? != 0 ]] ; then
 	echo "Installing Homebrew"
     ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 else
-	echo "Homebrew already installed, updating"
-    brew update
+	echo "Homebrew already installed"
 fi
 
 #
@@ -55,10 +54,11 @@ else
 	echo "virtualenv already installed"
 fi
 
-which -s imagemagick
-if [[ $? != 0 ]] ; then
-	echo installing imagemagick
+if [ ! -d /usr/local/Cellar/imagemagick ] ; then
+	echo "installing imagemagick"
 	brew install imagemagick
+else
+	echo "imagemagick already installed"
 fi
 
 #
@@ -80,7 +80,7 @@ which -s fastlane
 if [[ $? != 0 ]] ; then
     # Install fastlane
 	echo "Installing fastlane."
-    brew install fastlane
+    sudo gem install fastlane
     fastlane init
 else
 	echo "fastlane already installed"
