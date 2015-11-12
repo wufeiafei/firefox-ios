@@ -55,9 +55,9 @@ platform :ios do
     increment_version_number(version_number: ENV["APP_VERSION"]) 
 
     commit_version_bump(
-      message: 'Version Bump',
-    )
-     
+      message: 'Version Bump', 
+      xcodeproj: 'Client.xcodeproj', 
+    ) 
   end
 
   desc "Builds an Aurora build for l10n"
