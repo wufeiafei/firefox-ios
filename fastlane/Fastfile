@@ -52,7 +52,12 @@ platform :ios do
     sh("./scripts/mkdirs.sh")
 
     increment_build_number(build_number: ENV["BUILD_VERSION"])
-    increment_version_number(version_number: ENV["APP_VERSION"])  
+    increment_version_number(version_number: ENV["APP_VERSION"]) 
+
+    commit_version_bump(
+      message: 'Version Bump',
+    )
+     
   end
 
   desc "Builds an Aurora build for l10n"
