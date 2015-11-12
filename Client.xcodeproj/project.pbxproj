@@ -2495,6 +2495,7 @@
 				39EEB9761BF1557900F1BB93 /* SpotlightHelper.swift */,
 			);
 			name = Helpers;
+			path = ..;
 			sourceTree = "<group>";
 		};
 		D31FC22A1A8D908800BAF7EC /* Products */ = {
@@ -3009,7 +3010,6 @@
 				F84B21D61A090F8100AAB793 /* ClientTests */,
 				F8708D1E1A0970990051AB07 /* Extensions */,
 				28CE83B71A1D1D3200576538 /* FxAClient */,
-				39EEB9501BF1554000F1BB93 /* Helpers */,
 				F84B21BF1A090F8100AAB793 /* Products */,
 				D34DC84C1A16C40C00D49B7B /* Providers */,
 				E4D567191ADECE2700F1EFE7 /* ReadingList */,
@@ -3064,6 +3064,7 @@
 				F84B21E41A0910F600AAB793 /* Application */,
 				28EADE5C1AFC3A6D007FB2FB /* Extensions */,
 				F84B21F11A0910F600AAB793 /* Frontend */,
+				39EEB9501BF1554000F1BB93 /* Helpers */,
 			);
 			path = Client;
 			sourceTree = "<group>";
