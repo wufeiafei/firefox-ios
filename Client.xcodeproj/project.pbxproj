@@ -1201,20 +1201,6 @@
 			remoteGlobalIDString = 2FA435FA1ABB83B4008031D1;
 			remoteInfo = Account;
 		};
-		E4A85D101BF2600D008BD381 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 39A362B21AAF5E2B00F47390 /* XCGLogger.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 70CB94201B99E728007802FF;
-			remoteInfo = "XCGLogger (watchOS)";
-		};
-		E4A85D121BF2600D008BD381 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 39A362B21AAF5E2B00F47390 /* XCGLogger.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 5515A3DF1BA119FA0047BA31;
-			remoteInfo = "XCGLogger (tvOS)";
-		};
 		E4A888181A95679500CDC337 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 28CE83CA1A1D1D5100576538 /* FxA.xcodeproj */;
@@ -2501,8 +2487,6 @@
 			children = (
 				39A362D41AAF5E2C00F47390 /* XCGLogger.framework */,
 				39A362D61AAF5E2C00F47390 /* XCGLogger.framework */,
-				E4A85D111BF2600D008BD381 /* XCGLogger.framework */,
-				E4A85D131BF2600D008BD381 /* XCGLogger.framework */,
 				39A362D81AAF5E2C00F47390 /* XCGLoggerTests (iOS).xctest */,
 				7B7692CD1B7CCBD100188277 /* XCGLoggerTests (OS X).xctest */,
 			);
@@ -2531,8 +2515,8 @@
 			isa = PBXGroup;
 			children = (
 				D31FC2311A8D908900BAF7EC /* Alamofire.framework */,
-				D31FC2331A8D908900BAF7EC /* Alamofire.framework */,
-				7B7692951B7CCBD100188277 /* Alamofire.framework */,
+				D31FC2331A8D908900BAF7EC /* Alamofire_OSX.framework */,
+				7B7692951B7CCBD100188277 /* Alamofire_watchOS.framework */,
 				D31FC2351A8D908900BAF7EC /* Alamofire iOS Tests.xctest */,
 				D31FC2371A8D908900BAF7EC /* Alamofire OSX Tests.xctest */,
 			);
@@ -3976,10 +3960,10 @@
 			remoteRef = 39A362D71AAF5E2C00F47390 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		7B7692951B7CCBD100188277 /* Alamofire.framework */ = {
+		7B7692951B7CCBD100188277 /* Alamofire_watchOS.framework */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.framework;
-			path = Alamofire.framework;
+			path = Alamofire_watchOS.framework;
 			remoteRef = 7B7692941B7CCBD100188277 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
@@ -4053,10 +4037,10 @@
 			remoteRef = D31FC2301A8D908900BAF7EC /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		D31FC2331A8D908900BAF7EC /* Alamofire.framework */ = {
+		D31FC2331A8D908900BAF7EC /* Alamofire_OSX.framework */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.framework;
-			path = Alamofire.framework;
+			path = Alamofire_OSX.framework;
 			remoteRef = D31FC2321A8D908900BAF7EC /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
@@ -4135,20 +4119,6 @@
 			fileType = wrapper.framework;
 			path = WebImage.framework;
 			remoteRef = D3B5A0E91B5459F600C15BCF /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		E4A85D111BF2600D008BD381 /* XCGLogger.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = XCGLogger.framework;
-			remoteRef = E4A85D101BF2600D008BD381 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		E4A85D131BF2600D008BD381 /* XCGLogger.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = XCGLogger.framework;
-			remoteRef = E4A85D121BF2600D008BD381 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 		E69E4E2A1B9F709A00646EDB /* Breakpad.framework */ = {
@@ -6393,7 +6363,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ShareTo/Info.plist";
+				INFOPLIST_FILE = Extensions/ShareTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_BUNDLE_DISPLAY_NAME = "Fennec Nightly";
@@ -6415,7 +6385,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/SendTo/Info.plist";
+				INFOPLIST_FILE = Extensions/SendTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = FennecNightly;
@@ -6543,7 +6513,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ShareTo/Info.plist";
+				INFOPLIST_FILE = Extensions/ShareTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_BUNDLE_DISPLAY_NAME = Firefox;
@@ -6568,7 +6538,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/SendTo/Info.plist";
+				INFOPLIST_FILE = Extensions/SendTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = Firefox;
@@ -7047,7 +7017,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ViewLater/Info.plist";
+				INFOPLIST_FILE = Extensions/ViewLater/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = Fennec;
@@ -7093,7 +7063,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ViewLater/Info.plist";
+				INFOPLIST_FILE = Extensions/ViewLater/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = FennecAurora;
@@ -7143,7 +7113,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ViewLater/Info.plist";
+				INFOPLIST_FILE = Extensions/ViewLater/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = Firefox;
@@ -7192,7 +7162,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ViewLater/Info.plist";
+				INFOPLIST_FILE = Extensions/ViewLater/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = FennecNightly;
@@ -7812,7 +7782,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ShareTo/Info.plist";
+				INFOPLIST_FILE = Extensions/ShareTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_BUNDLE_DISPLAY_NAME = "Fennec ($(USER))";
@@ -7834,7 +7804,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/ShareTo/Info.plist";
+				INFOPLIST_FILE = Extensions/ShareTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_BUNDLE_DISPLAY_NAME = "Fennec Aurora";
@@ -7861,7 +7831,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/SendTo/Info.plist";
+				INFOPLIST_FILE = Extensions/SendTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = Fennec;
@@ -7883,7 +7853,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = "$(SRCROOT)/Extensions/SendTo/Info.plist";
+				INFOPLIST_FILE = Extensions/SendTo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.2;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MOZ_PRODUCT_NAME = FennecAurora;
