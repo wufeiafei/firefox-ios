@@ -3,75 +3,109 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import UIKit
-
 import Shared
 import Storage
 import XCGLogger
-
-private let log = Logger.browserLogger
-
-private func getDate(dayOffset dayOffset: Int) -> NSDate {
-    let calendar = NSCalendar(calendarIdentifier: NSCalendarIdentifierGregorian)!
-    let nowComponents = calendar.components([NSCalendarUnit.Year, NSCalendarUnit.Month, NSCalendarUnit.Day], fromDate: NSDate())
-    let today = calendar.dateFromComponents(nowComponents)!
-    return calendar.dateByAddingUnit(NSCalendarUnit.Day, value: dayOffset, toDate: today, options: [])!
-}
-
-private typealias SectionNumber = Int
-private typealias CategoryNumber = Int
-private typealias CategorySpec = (section: SectionNumber?, rows: Int, offset: Int)
+import Deferred
+import WebKit
 
 private struct HistoryPanelUX {
-    static let WelcomeScreenPadding: CGFloat = 15
-    static let WelcomeScreenItemFont = UIFont.systemFontOfSize(UIConstants.DeviceFontSize, weight: UIFontWeightLight) // Changes font size based on device.
-    static let WelcomeScreenItemTextColor = UIColor.grayColor()
+    static let WelcomeScreenItemTextColor = UIColor.Photon.Grey50
     static let WelcomeScreenItemWidth = 170
+    static let IconSize = 23
+    static let IconBorderColor = UIColor.Photon.Grey30
+    static let IconBorderWidth: CGFloat = 0.5
+}
+
+private class FetchInProgressError: MaybeErrorType {
+    internal var description: String {
+        return "Fetch is already in-progress"
+    }
 }
 
 class HistoryPanel: SiteTableViewController, HomePanel {
-    weak var homePanelDelegate: HomePanelDelegate? = nil
+    enum Section: Int {
+        // Showing synced tabs, showing recently closed, and clearing recent history are action rows of this type.
+        case additionalHistoryActions
+        case today
+        case yesterday
+        case lastWeek
+        case lastMonth
 
-    private lazy var emptyStateOverlayView: UIView = self.createEmptyStateOverview()
+        static let count = 5
 
-    private let QueryLimit = 100
-    private let NumSections = 4
-    private let Today = getDate(dayOffset: 0)
-    private let Yesterday = getDate(dayOffset: -1)
-    private let ThisWeek = getDate(dayOffset: -7)
+        var title: String? {
+            switch self {
+            case .today:
+                return Strings.TableDateSectionTitleToday
+            case .yesterday:
+                return Strings.TableDateSectionTitleYesterday
+            case .lastWeek:
+                return Strings.TableDateSectionTitleLastWeek
+            case .lastMonth:
+                return Strings.TableDateSectionTitleLastMonth
+            default:
+                return nil
+            }
+        }
+    }
 
-    // Category number (index) -> (UI section, row count, cursor offset).
-    private var categories: [CategorySpec] = [CategorySpec]()
+    enum AdditionalHistoryActionRow: Int {
+        case clearRecent
+        case showRecentlyClosedTabs
+        case showSyncTabs
 
-    // Reverse lookup from UI section to data category.
-    private var sectionLookup = [SectionNumber: CategoryNumber]()
+        // Use to enable/disable the additional history action rows.
+        static func setStyle(enabled: Bool, forCell cell: UITableViewCell) {
+            if enabled {
+                cell.textLabel?.alpha = 1.0
+                cell.imageView?.alpha = 1.0
+                cell.selectionStyle = .default
+                cell.isUserInteractionEnabled = true
+            } else {
+                cell.textLabel?.alpha = 0.5
+                cell.imageView?.alpha = 0.5
+                cell.selectionStyle = .none
+                cell.isUserInteractionEnabled = false
+            }
+        }
+    }
 
-    private lazy var defaultIcon: UIImage = {
-        return UIImage(named: "defaultFavicon")!
-    }()
+    let QueryLimitPerFetch = 100
+
+    var homePanelDelegate: HomePanelDelegate?
+
+    var groupedSites = DateGroupedTableData<Site>()
 
     var refreshControl: UIRefreshControl?
 
-    init() {
-        super.init(nibName: nil, bundle: nil)
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: "notificationReceived:", name: NotificationFirefoxAccountChanged, object: nil)
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: "notificationReceived:", name: NotificationPrivateDataClearedHistory, object: nil)
+    var syncDetailText = ""
+    var currentSyncedDevicesCount = 0
+
+    var currentFetchOffset = 0
+    var isFetchInProgress = false
+
+    var clearHistoryCell: UITableViewCell?
+
+    var hasRecentlyClosed: Bool {
+        return profile.recentlyClosedTabs.tabs.count > 0
     }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        self.tableView.accessibilityIdentifier = "History List"
-    }
+    lazy var emptyStateOverlayView: UIView = createEmptyStateOverlayView()
 
-    override func viewWillAppear(animated: Bool) {
-        super.viewWillAppear(animated)
+    lazy var longPressRecognizer: UILongPressGestureRecognizer = {
+        return UILongPressGestureRecognizer(target: self, action: #selector(onLongPressGestureRecognized))
+    }()
 
-        // Add a refresh control if the user is logged in and the control was not added before. If the user is not
-        // logged in, remove any existing control but only when it is not currently refreshing. Otherwise, wait for
-        // the refresh to finish before removing the control.
-        if profile.hasSyncableAccount() && self.refreshControl == nil {
-            addRefreshControl()
-        } else if self.refreshControl?.refreshing == false {
-            removeRefreshControl()
+    // MARK: - Lifecycle
+    override init(profile: Profile) {
+        super.init(profile: profile)
+
+        [ Notification.Name.FirefoxAccountChanged,
+          Notification.Name.PrivateDataClearedHistory,
+          Notification.Name.DynamicFontChanged,
+          Notification.Name.DatabaseWasReopened ].forEach {
+            NotificationCenter.default.addObserver(self, selector: #selector(onNotificationReceived), name: $0, object: nil)
         }
     }
 
@@ -79,350 +113,564 @@ class HistoryPanel: SiteTableViewController, HomePanel {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        NSNotificationCenter.defaultCenter().removeObserver(self, name: NotificationFirefoxAccountChanged, object: nil)
-        NSNotificationCenter.defaultCenter().removeObserver(self, name: NotificationPrivateDataClearedHistory, object: nil)
-    }
-
-    func notificationReceived(notification: NSNotification) {
-        switch notification.name {
-        case NotificationFirefoxAccountChanged, NotificationPrivateDataClearedHistory:
-            resyncHistory()
-            break
-        default:
-            // no need to do anything at all
-            log.warning("Received unexpected notification \(notification.name)")
-            break
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        tableView.addGestureRecognizer(longPressRecognizer)
+        tableView.accessibilityIdentifier = "History List"
+        tableView.prefetchDataSource = self
+        updateSyncedDevicesCount().uponQueue(.main) { result in
+            self.updateNumberOfSyncedDevices(self.currentSyncedDevicesCount)
         }
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        // Add a refresh control if the user is logged in and the control was not added before. If the user is not
+        // logged in, remove any existing control.
+        if profile.hasSyncableAccount() && refreshControl == nil {
+            addRefreshControl()
+        } else if !profile.hasSyncableAccount() && refreshControl != nil {
+            removeRefreshControl()
+        }
+
+        if profile.hasSyncableAccount() {
+            syncDetailText = " "
+            updateSyncedDevicesCount().uponQueue(.main) { result in
+                self.updateNumberOfSyncedDevices(self.currentSyncedDevicesCount)
+            }
+        } else {
+            syncDetailText = ""
+        }
+        reloadData()
+    }
+
+    // MARK: - Refreshing TableView
+
     func addRefreshControl() {
-        let refresh = UIRefreshControl()
-        refresh.addTarget(self, action: "refresh", forControlEvents: UIControlEvents.ValueChanged)
-        self.refreshControl = refresh
-        self.tableView.addSubview(refresh)
+        let control = UIRefreshControl()
+        control.addTarget(self, action: #selector(onRefreshPulled), for: .valueChanged)
+        refreshControl = control
+        tableView.refreshControl = control
     }
 
     func removeRefreshControl() {
-        self.refreshControl?.removeFromSuperview()
-        self.refreshControl = nil
+        tableView.refreshControl = nil
+        refreshControl = nil
     }
 
     func endRefreshing() {
         // Always end refreshing, even if we failed!
-        self.refreshControl?.endRefreshing()
+        refreshControl?.endRefreshing()
 
         // Remove the refresh control if the user has logged out in the meantime
-        if !self.profile.hasSyncableAccount() {
-            self.removeRefreshControl()
+        if !profile.hasSyncableAccount() {
+            removeRefreshControl()
         }
     }
 
-    /**
-    * sync history with the server and ensure that we update our view afterwards
-    **/
-    func resyncHistory() {
-        profile.syncManager.syncHistory().uponQueue(dispatch_get_main_queue()) { result in
-            if result.isSuccess {
-                self.reloadData()
-            } else {
-                self.endRefreshing()
-            }
-        }
-    }
+    // MARK: - Loading data
 
-    /**
-    * called by the table view pull to refresh
-    **/
-    @objc func refresh() {
-        self.refreshControl?.beginRefreshing()
-        resyncHistory()
-    }
-
-    /**
-    * fetch from the profile
-    **/
-    private func fetchData() -> Deferred<Maybe<Cursor<Site>>> {
-        return profile.history.getSitesByLastVisit(QueryLimit)
-    }
-
-    private func setData(data: Cursor<Site>) {
-        self.data = data
-        self.computeSectionOffsets()
-    }
-
-    /**
-    * Update our view after a data refresh
-    **/
     override func reloadData() {
-        self.fetchData().uponQueue(dispatch_get_main_queue()) { result in
-            if let data = result.successValue {
-                self.setData(data)
+        guard !isFetchInProgress else { return }
+        groupedSites = DateGroupedTableData<Site>()
+
+        currentFetchOffset = 0
+        fetchData().uponQueue(.main) { result in
+            if let sites = result.successValue {
+                for site in sites {
+                    if let site = site, let latestVisit = site.latestVisit {
+                        self.groupedSites.add(site, timestamp: TimeInterval.fromMicrosecondTimestamp(latestVisit.date))
+                    }
+                }
+
                 self.tableView.reloadData()
                 self.updateEmptyPanelState()
+
+                if let cell = self.clearHistoryCell {
+                    AdditionalHistoryActionRow.setStyle(enabled: !self.groupedSites.isEmpty, forCell: cell)
+                }
+
             }
-
-            self.endRefreshing()
-
-            // TODO: error handling.
         }
     }
 
-    private func updateEmptyPanelState() {
-        if data.count == 0 {
-            if self.emptyStateOverlayView.superview == nil {
-                self.tableView.addSubview(self.emptyStateOverlayView)
-                self.emptyStateOverlayView.snp_makeConstraints { make -> Void in
-                    make.edges.equalTo(self.tableView)
-                    make.size.equalTo(self.view)
+    func fetchData() -> Deferred<Maybe<Cursor<Site>>> {
+        guard !isFetchInProgress else {
+            return deferMaybe(FetchInProgressError())
+        }
+
+        isFetchInProgress = true
+
+        return profile.history.getSitesByLastVisit(limit: QueryLimitPerFetch, offset: currentFetchOffset) >>== { result in
+            // Force 100ms delay between resolution of the last batch of results
+            // and the next time `fetchData()` can be called.
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) {
+                self.currentFetchOffset += self.QueryLimitPerFetch
+                self.isFetchInProgress = false
+            }
+
+            return deferMaybe(result)
+        }
+    }
+
+    func resyncHistory() {
+        profile.syncManager.syncHistory().uponQueue(.main) { syncResult in
+            self.updateSyncedDevicesCount().uponQueue(.main) { result in
+                self.endRefreshing()
+
+                self.updateNumberOfSyncedDevices(self.currentSyncedDevicesCount)
+
+                if syncResult.isSuccess {
+                    self.reloadData()
                 }
             }
+        }
+    }
+
+    func updateNumberOfSyncedDevices(_ count: Int) {
+        if count > 0 {
+            syncDetailText = String.localizedStringWithFormat(Strings.SyncedTabsTableViewCellDescription, count)
         } else {
-            self.emptyStateOverlayView.removeFromSuperview()
+            syncDetailText = ""
+        }
+
+        tableView.reloadData()
+    }
+
+    func updateSyncedDevicesCount() -> Success {
+        guard profile.hasSyncableAccount() else {
+            currentSyncedDevicesCount = 0
+            return succeed()
+        }
+
+        return chainDeferred(profile.getCachedClientsAndTabs()) { tabsAndClients in
+            self.currentSyncedDevicesCount = tabsAndClients.count
+            return succeed()
         }
     }
 
-    private func createEmptyStateOverview() -> UIView {
-        let overlayView = UIView()
-        overlayView.backgroundColor = UIColor.whiteColor()
+    // MARK: - Actions
 
-        let logoImageView = UIImageView(image: UIImage(named: "emptyHistory"))
-        overlayView.addSubview(logoImageView)
-        logoImageView.snp_makeConstraints { make in
-            make.centerX.equalTo(overlayView)
-
-            // Sets proper top constraint for iPhone 6 in portait and for iPad.
-            make.centerY.equalTo(overlayView.snp_centerY).offset(HomePanelUX.EmptyTabContentOffset).priorityMedium()
-
-            // Sets proper top constraint for iPhone 4, 5 in portrait.
-            make.top.greaterThanOrEqualTo(overlayView.snp_top).offset(50).priorityHigh()
+    func removeHistoryForURLAtIndexPath(indexPath: IndexPath) {
+        guard let site = siteForIndexPath(indexPath) else {
+            return
         }
 
-        let welcomeLabel = UILabel()
-        overlayView.addSubview(welcomeLabel)
-        welcomeLabel.text = NSLocalizedString("Pages you have visited recently will show up here.", comment: "See http://bit.ly/1I7Do4b")
-        welcomeLabel.textAlignment = NSTextAlignment.Center
-        welcomeLabel.font = HistoryPanelUX.WelcomeScreenItemFont
-        welcomeLabel.textColor = HistoryPanelUX.WelcomeScreenItemTextColor
-        welcomeLabel.numberOfLines = 2
-        welcomeLabel.adjustsFontSizeToFitWidth = true
+        profile.history.removeHistoryForURL(site.url).uponQueue(.main) { result in
+            self.tableView.beginUpdates()
+            self.groupedSites.remove(site)
+            self.tableView.deleteRows(at: [indexPath], with: .right)
+            self.tableView.endUpdates()
+            self.updateEmptyPanelState()
 
-        welcomeLabel.snp_makeConstraints { make in
-            make.centerX.equalTo(overlayView)
-            make.top.equalTo(logoImageView.snp_bottom).offset(HistoryPanelUX.WelcomeScreenPadding)
-            make.width.equalTo(HistoryPanelUX.WelcomeScreenItemWidth)
-        }
-
-        return overlayView
-    }
-    
-    override func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
-        let cell = super.tableView(tableView, cellForRowAtIndexPath: indexPath)
-        let category = self.categories[indexPath.section]
-        if let site = data[indexPath.row + category.offset] {
-            if let cell = cell as? TwoLineTableViewCell {
-                cell.setLines(site.title, detailText: site.url)
-                cell.imageView?.setIcon(site.icon, withPlaceholder: self.defaultIcon)
+            if let cell = self.clearHistoryCell {
+                AdditionalHistoryActionRow.setStyle(enabled: !self.groupedSites.isEmpty, forCell: cell)
             }
         }
+    }
+
+    func pinToTopSites(_ site: Site) {
+        _ = profile.history.addPinnedTopSite(site).value
+    }
+
+    func navigateToSyncedTabs() {
+        let nextController = RemoteTabsPanel(profile: profile)
+        nextController.homePanelDelegate = homePanelDelegate
+        refreshControl?.endRefreshing()
+        navigationController?.pushViewController(nextController, animated: true)
+    }
+
+    func navigateToRecentlyClosed() {
+        guard hasRecentlyClosed else {
+            return
+        }
+
+        let nextController = RecentlyClosedTabsPanel(profile: profile)
+        nextController.homePanelDelegate = homePanelDelegate
+        refreshControl?.endRefreshing()
+        navigationController?.pushViewController(nextController, animated: true)
+    }
+
+    func showClearRecentHistory() {
+        func remove(hoursAgo: Int) {
+            if let date = Calendar.current.date(byAdding: .hour, value: -hoursAgo, to: Date()) {
+                let types = WKWebsiteDataStore.allWebsiteDataTypes()
+                WKWebsiteDataStore.default().removeData(ofTypes: types, modifiedSince: date, completionHandler: {})
+
+                self.profile.history.removeHistoryFromDate(date).uponQueue(.main) { _ in
+                    self.reloadData()
+                }
+            }
+        }
+
+        let alert = UIAlertController(title: Strings.ClearHistoryMenuTitle, message: nil, preferredStyle: .actionSheet)
+
+        [(Strings.ClearHistoryMenuOptionTheLastHour, 1),
+         (Strings.ClearHistoryMenuOptionToday, 24),
+         (Strings.ClearHistoryMenuOptionTodayAndYesterday, 48)].forEach {
+            (name, time) in
+            let action = UIAlertAction(title: name, style: .destructive) { _ in
+                remove(hoursAgo: time)
+            }
+            alert.addAction(action)
+        }
+
+        let cancelAction = UIAlertAction(title: Strings.CancelString, style: .cancel)
+        alert.addAction(cancelAction)
+        present(alert, animated: true)
+    }
+
+    // MARK: - Cell configuration
+
+    func siteForIndexPath(_ indexPath: IndexPath) -> Site? {
+        // First section is reserved for Sync.
+        guard indexPath.section > Section.additionalHistoryActions.rawValue else {
+            return nil
+        }
+
+        let sitesInSection = groupedSites.itemsForSection(indexPath.section - 1)
+        return sitesInSection[safe: indexPath.row]
+    }
+
+    func configureClearHistory(_ cell: UITableViewCell, for indexPath: IndexPath) -> UITableViewCell {
+        clearHistoryCell = cell
+        cell.textLabel?.text = Strings.HistoryPanelClearHistoryButtonTitle
+        cell.detailTextLabel?.text = ""
+        cell.imageView?.image = UIImage.templateImageNamed("forget")
+        cell.imageView?.tintColor = UIColor(colorString: "0xb2b2b2")
+        cell.imageView?.backgroundColor = UIColor.theme.homePanel.historyHeaderIconsBackground
+        cell.accessibilityIdentifier = "HistoryPanel.clearHistory"
+
+        var isEmpty = true
+        for i in Section.today.rawValue..<tableView.numberOfSections {
+            if tableView.numberOfRows(inSection: i) > 0 {
+                isEmpty = false
+            }
+        }
+        AdditionalHistoryActionRow.setStyle(enabled: !isEmpty, forCell: cell)
 
         return cell
     }
 
-    private func siteForIndexPath(indexPath: NSIndexPath) -> Site? {
-        let offset = self.categories[sectionLookup[indexPath.section]!].offset
-        return data[indexPath.row + offset]
+    func configureRecentlyClosed(_ cell: UITableViewCell, for indexPath: IndexPath) -> UITableViewCell {
+        cell.accessoryType = .disclosureIndicator
+        cell.textLabel?.text = Strings.RecentlyClosedTabsButtonTitle
+        cell.detailTextLabel?.text = ""
+        cell.imageView?.image = UIImage(named: "recently_closed")
+        cell.imageView?.backgroundColor = UIColor.theme.homePanel.historyHeaderIconsBackground
+        AdditionalHistoryActionRow.setStyle(enabled: hasRecentlyClosed, forCell: cell)
+        cell.accessibilityIdentifier = "HistoryPanel.recentlyClosedCell"
+        return cell
     }
 
-    func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
-        if let site = self.siteForIndexPath(indexPath),
-           let url = NSURL(string: site.url) {
-            let visitType = VisitType.Typed    // Means History, too.
-            homePanelDelegate?.homePanel(self, didSelectURL: url, visitType: visitType)
+    func configureSyncedTabs(_ cell: UITableViewCell, for indexPath: IndexPath) -> UITableViewCell {
+        cell.accessoryType = .disclosureIndicator
+        cell.textLabel?.text = Strings.SyncedTabsTableViewCellTitle
+        cell.detailTextLabel?.text = syncDetailText
+        cell.imageView?.image = UIImage(named: "synced_devices")
+        cell.imageView?.backgroundColor = UIColor.theme.homePanel.historyHeaderIconsBackground
+        cell.accessibilityIdentifier = "HistoryPanel.syncedDevicesCell"
+        return cell
+    }
+
+    func configureSite(_ cell: UITableViewCell, for indexPath: IndexPath) -> UITableViewCell {
+        if let site = siteForIndexPath(indexPath), let cell = cell as? TwoLineTableViewCell {
+            cell.setLines(site.title, detailText: site.url)
+
+            cell.imageView?.layer.borderColor = HistoryPanelUX.IconBorderColor.cgColor
+            cell.imageView?.layer.borderWidth = HistoryPanelUX.IconBorderWidth
+            cell.imageView?.setIcon(site.icon, forURL: site.tileURL, completed: { (color, url) in
+                if site.tileURL == url {
+                    cell.imageView?.image = cell.imageView?.image?.createScaled(CGSize(width: HistoryPanelUX.IconSize, height: HistoryPanelUX.IconSize))
+                    cell.imageView?.backgroundColor = color
+                    cell.imageView?.contentMode = .center
+                }
+            })
+        }
+        return cell
+    }
+
+    // MARK: - Selector callbacks
+
+    @objc func onNotificationReceived(_ notification: Notification) {
+        switch notification.name {
+        case .FirefoxAccountChanged, .PrivateDataClearedHistory:
+            reloadData()
+
+            if profile.hasSyncableAccount() {
+                resyncHistory()
+            }
+            break
+        case .DynamicFontChanged:
+            reloadData()
+
+            if emptyStateOverlayView.superview != nil {
+                emptyStateOverlayView.removeFromSuperview()
+            }
+            emptyStateOverlayView = createEmptyStateOverlayView()
+            resyncHistory()
+            break
+        case .DatabaseWasReopened:
+            if let dbName = notification.object as? String, dbName == "browser.db" {
+                reloadData()
+            }
+        default:
+            // no need to do anything at all
+            print("Error: Received unexpected notification \(notification.name)")
+            break
+        }
+    }
+
+    @objc func onLongPressGestureRecognized(_ longPressGestureRecognizer: UILongPressGestureRecognizer) {
+        guard longPressGestureRecognizer.state == .began else { return }
+        let touchPoint = longPressGestureRecognizer.location(in: tableView)
+        guard let indexPath = tableView.indexPathForRow(at: touchPoint) else { return }
+
+        if indexPath.section != Section.additionalHistoryActions.rawValue {
+            presentContextMenu(for: indexPath)
+        }
+    }
+
+    @objc func onRefreshPulled() {
+        refreshControl?.beginRefreshing()
+        resyncHistory()
+    }
+
+    // MARK: - UITableViewDataSource
+    func numberOfSections(in tableView: UITableView) -> Int {
+        return Section.count
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        // First section is for Sync/recently closed and always has 2 rows.
+        guard section > Section.additionalHistoryActions.rawValue else {
+            return 3
+        }
+
+        return groupedSites.numberOfItemsForSection(section - 1)
+    }
+
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        // First section is for Sync/recently closed and has no title.
+        guard section > Section.additionalHistoryActions.rawValue else {
+            return nil
+        }
+
+        // Ensure there are rows in this section.
+        guard groupedSites.numberOfItemsForSection(section - 1) > 0 else {
+            return nil
+        }
+
+        return Section(rawValue: section)?.title
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
+        cell.accessoryType = .none
+
+        // First section is reserved for Sync/recently closed.
+        guard indexPath.section > Section.additionalHistoryActions.rawValue else {
+            cell.imageView?.layer.borderWidth = 0
+
+            guard let row = AdditionalHistoryActionRow(rawValue: indexPath.row) else {
+                assertionFailure("Bad row number")
+                return cell
+            }
+
+            switch row {
+            case .clearRecent:
+                return configureClearHistory(cell, for: indexPath)
+            case .showRecentlyClosedTabs:
+                return configureRecentlyClosed(cell, for: indexPath)
+            case .showSyncTabs:
+                return configureSyncedTabs(cell, for: indexPath)
+            }
+        }
+
+        return configureSite(cell, for: indexPath)
+    }
+
+    // MARK: - UITableViewDelegate
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        // First section is reserved for Sync/recently closed.
+        defer {
+            tableView.deselectRow(at: indexPath, animated: true)
+        }
+        guard indexPath.section > Section.additionalHistoryActions.rawValue else {
+            switch indexPath.row {
+            case 0:
+                showClearRecentHistory()
+            case 1:
+                navigateToRecentlyClosed()
+            default:
+                navigateToSyncedTabs()
+            }
             return
         }
-        log.warning("No site or no URL when selecting row.")
-    }
 
-    // Functions that deal with showing header rows.
-    func numberOfSectionsInTableView(tableView: UITableView) -> Int {
-        var count = 0
-        for category in self.categories {
-            if category.rows > 0 {
-                count++
+        if let site = siteForIndexPath(indexPath), let url = URL(string: site.url) {
+            if let homePanelDelegate = homePanelDelegate {
+                homePanelDelegate.homePanel(didSelectURL: url, visitType: VisitType.typed)
             }
+            return
         }
-        return count
+        print("Error: No site or no URL when selecting row.")
     }
 
-    func tableView(tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        var title = String()
-        switch sectionLookup[section]! {
-        case 0: title = NSLocalizedString("Today", comment: "History tableview section header")
-        case 1: title = NSLocalizedString("Yesterday", comment: "History tableview section header")
-        case 2: title = NSLocalizedString("Last week", comment: "History tableview section header")
-        case 3: title = NSLocalizedString("Last month", comment: "History tableview section header")
-        default:
-            assertionFailure("Invalid history section \(section)")
+    override func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
+        if let header = view as? UITableViewHeaderFooterView {
+            header.textLabel?.textColor = UIColor.theme.tableView.headerTextDark
+            header.contentView.backgroundColor = UIColor.theme.tableView.headerBackground
         }
-        return title
     }
 
-    func categoryForDate(date: MicrosecondTimestamp) -> Int {
-        let date = Double(date)
-        if date > (1000000 * Today.timeIntervalSince1970) {
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        // First section is for Sync/recently closed and its header has no view.
+        guard section > Section.additionalHistoryActions.rawValue else {
+            return nil
+        }
+
+        // Ensure there are rows in this section.
+        guard groupedSites.numberOfItemsForSection(section - 1) > 0 else {
+            return nil
+        }
+
+        return super.tableView(tableView, viewForHeaderInSection: section)
+    }
+
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        // First section is for Sync/recently closed and its header has no height.
+        guard section > Section.additionalHistoryActions.rawValue else {
             return 0
         }
-        if date > (1000000 * Yesterday.timeIntervalSince1970) {
-            return 1
-        }
-        if date > (1000000 * ThisWeek.timeIntervalSince1970) {
-            return 2
-        }
-        return 3
-    }
 
-    private func isInCategory(date: MicrosecondTimestamp, category: Int) -> Bool {
-        return self.categoryForDate(date) == category
-    }
-
-    func computeSectionOffsets() {
-        var counts = [Int](count: NumSections, repeatedValue: 0)
-
-        // Loop over all the data. Record the start of each "section" of our list.
-        for i in 0..<data.count {
-            if let site = data[i] {
-                counts[categoryForDate(site.latestVisit!.date)]++
-            }
+        // Ensure there are rows in this section.
+        guard groupedSites.numberOfItemsForSection(section - 1) > 0 else {
+            return 0
         }
 
-        var section = 0
-        var offset = 0
-        self.categories = [CategorySpec]()
-        for i in 0..<NumSections {
-            let count = counts[i]
-            if count > 0 {
-                log.debug("Category \(i) has \(count) rows, and thus is section \(section).")
-                self.categories.append((section: section, rows: count, offset: offset))
-                sectionLookup[section] = i
-                offset += count
-                section++
-            } else {
-                log.debug("Category \(i) has 0 rows, and thus has no section.")
-                self.categories.append((section: nil, rows: 0, offset: offset))
-            }
-        }
+        return super.tableView(tableView, heightForHeaderInSection: section)
     }
 
-    // UI sections disappear as categories empty. We need to translate back and forth.
-    private func uiSectionToCategory(section: SectionNumber) -> CategoryNumber {
-        for i in 0..<self.categories.count {
-            if let s = self.categories[i].section where s == section {
-                return i
-            }
-        }
-        return 0
-    }
-
-    private func categoryToUISection(category: CategoryNumber) -> SectionNumber? {
-        return self.categories[category].section
-    }
-
-    override func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.categories[uiSectionToCategory(section)].rows
-    }
-
-    func tableView(tableView: UITableView, commitEditingStyle editingStyle: UITableViewCellEditingStyle, forRowAtIndexPath indexPath: NSIndexPath) {
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
         // Intentionally blank. Required to use UITableViewRowActions
     }
 
-    func tableView(tableView: UITableView, editActionsForRowAtIndexPath indexPath: NSIndexPath) -> [AnyObject]? {
-        let title = NSLocalizedString("Remove", tableName: "HistoryPanel", comment: "Action button for deleting history entries in the history panel.")
+    func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath) -> [UITableViewRowAction]? {
+        if indexPath.section == Section.additionalHistoryActions.rawValue {
+            return []
+        }
+        let title = NSLocalizedString("Delete", tableName: "HistoryPanel", comment: "Action button for deleting history entries in the history panel.")
 
-        let delete = UITableViewRowAction(style: UITableViewRowActionStyle.Default, title: title, handler: { (action, indexPath) in
-            if let site = self.siteForIndexPath(indexPath) {
-                // Why the dispatches? Because we call success and failure on the DB
-                // queue, and so calling anything else that calls through to the DB will
-                // deadlock. This problem will go away when the history API switches to
-                // Deferred instead of using callbacks.
-                self.profile.history.removeHistoryForURL(site.url)
-                    .upon { res in
-                        self.fetchData().uponQueue(dispatch_get_main_queue()) { result in
-                            // If a section will be empty after removal, we must remove the section itself.
-                            if let data = result.successValue {
-
-                                let oldCategories = self.categories
-                                self.data = data
-                                self.computeSectionOffsets()
-
-                                let sectionsToDelete = NSMutableIndexSet()
-                                var rowsToDelete = [NSIndexPath]()
-                                let sectionsToAdd = NSMutableIndexSet()
-                                var rowsToAdd = [NSIndexPath]()
-
-                                for (index, category) in self.categories.enumerate() {
-                                    let oldCategory = oldCategories[index]
-
-                                    // don't bother if we're not displaying this category
-                                    if oldCategory.section == nil && category.section == nil {
-                                        continue
-                                    }
-
-                                    // 1. add a new section if the section didn't previously exist
-                                    if oldCategory.section == nil && category.section != oldCategory.section {
-                                        log.debug("adding section \(category.section)")
-                                        sectionsToAdd.addIndex(category.section!)
-                                    }
-
-                                    // 2. add a new row if there are more rows now than there were before
-                                    if oldCategory.rows < category.rows {
-                                        log.debug("adding row to \(category.section) at \(category.rows-1)")
-                                        rowsToAdd.append(NSIndexPath(forRow: category.rows-1, inSection: category.section!))
-                                    }
-
-                                    // if we're dealing with the section where the row was deleted:
-                                    // 1. if the category no longer has a section, then we need to delete the entire section
-                                    // 2. delete a row if the number of rows has been reduced
-                                    // 3. delete the selected row and add a new one on the bottom of the section if the number of rows has stayed the same
-                                    if oldCategory.section == indexPath.section {
-                                        if category.section == nil {
-                                            log.debug("deleting section \(indexPath.section)")
-                                            sectionsToDelete.addIndex(indexPath.section)
-                                        } else if oldCategory.section == category.section {
-                                            if oldCategory.rows > category.rows {
-                                                log.debug("deleting row from \(category.section) at \(indexPath.row)")
-                                                rowsToDelete.append(indexPath)
-                                            } else if category.rows == oldCategory.rows {
-                                                log.debug("in section \(category.section), removing row at \(indexPath.row) and inserting row at \(category.rows-1)")
-                                                rowsToDelete.append(indexPath)
-                                                rowsToAdd.append(NSIndexPath(forRow: category.rows-1, inSection: indexPath.section))
-                                            }
-                                        }
-                                    }
-                                }
-
-                                tableView.beginUpdates()
-                                if sectionsToAdd.count > 0 {
-                                    tableView.insertSections(sectionsToAdd, withRowAnimation: UITableViewRowAnimation.Left)
-                                }
-                                if sectionsToDelete.count > 0 {
-                                    tableView.deleteSections(sectionsToDelete, withRowAnimation: UITableViewRowAnimation.Right)
-                                }
-                                if !rowsToDelete.isEmpty {
-                                    tableView.deleteRowsAtIndexPaths(rowsToDelete, withRowAnimation: UITableViewRowAnimation.Right)
-                                }
-
-                                if !rowsToAdd.isEmpty {
-                                    tableView.insertRowsAtIndexPaths(rowsToAdd, withRowAnimation: UITableViewRowAnimation.Right)
-                                }
-
-                                tableView.endUpdates()
-                                self.updateEmptyPanelState()
-                            }
-                        }
-                }
-            }
+        let delete = UITableViewRowAction(style: .default, title: title, handler: { (action, indexPath) in
+            self.removeHistoryForURLAtIndexPath(indexPath: indexPath)
         })
         return [delete]
+    }
+
+    // MARK: - Empty State
+    func updateEmptyPanelState() {
+        if groupedSites.isEmpty {
+            if emptyStateOverlayView.superview == nil {
+                tableView.addSubview(emptyStateOverlayView)
+                emptyStateOverlayView.snp.makeConstraints { make -> Void in
+                    make.left.right.bottom.equalTo(self.view)
+                    make.top.equalTo(self.view).offset(144)
+                }
+            }
+        } else {
+            tableView.alwaysBounceVertical = true
+            emptyStateOverlayView.removeFromSuperview()
+        }
+    }
+
+    func createEmptyStateOverlayView() -> UIView {
+        let overlayView = UIView()
+        overlayView.backgroundColor = UIColor.theme.homePanel.panelBackground
+
+        let welcomeLabel = UILabel()
+        overlayView.addSubview(welcomeLabel)
+        welcomeLabel.text = Strings.HistoryPanelEmptyStateTitle
+        welcomeLabel.textAlignment = .center
+        welcomeLabel.font = DynamicFontHelper.defaultHelper.DeviceFontLight
+        welcomeLabel.textColor = HistoryPanelUX.WelcomeScreenItemTextColor
+        welcomeLabel.numberOfLines = 0
+        welcomeLabel.adjustsFontSizeToFitWidth = true
+
+        welcomeLabel.snp.makeConstraints { make in
+            make.centerX.equalTo(overlayView)
+            // Sets proper top constraint for iPhone 6 in portait and for iPad.
+            make.centerY.equalTo(overlayView).offset(HomePanelUX.EmptyTabContentOffset).priority(100)
+            // Sets proper top constraint for iPhone 4, 5 in portrait.
+            make.top.greaterThanOrEqualTo(overlayView).offset(50)
+            make.width.equalTo(HistoryPanelUX.WelcomeScreenItemWidth)
+        }
+        return overlayView
+    }
+
+    override func applyTheme() {
+        emptyStateOverlayView.removeFromSuperview()
+        emptyStateOverlayView = createEmptyStateOverlayView()
+        updateEmptyPanelState()
+
+        super.applyTheme()
+    }
+}
+
+extension HistoryPanel: UITableViewDataSourcePrefetching {
+    func tableView(_ tableView: UITableView, prefetchRowsAt indexPaths: [IndexPath]) {
+        guard !isFetchInProgress, indexPaths.contains(where: shouldLoadRow) else {
+            return
+        }
+
+        fetchData().uponQueue(.main) { result in
+            if let sites = result.successValue {
+                let indexPaths: [IndexPath] = sites.compactMap({ site in
+                    guard let site = site, let latestVisit = site.latestVisit else {
+                        return nil
+                    }
+
+                    let indexPath = self.groupedSites.add(site, timestamp: TimeInterval.fromMicrosecondTimestamp(latestVisit.date))
+                    return IndexPath(row: indexPath.row, section: indexPath.section + 1)
+                })
+
+                self.tableView.insertRows(at: indexPaths, with: .automatic)
+            }
+        }
+    }
+
+    func shouldLoadRow(for indexPath: IndexPath) -> Bool {
+        guard indexPath.section > Section.additionalHistoryActions.rawValue else {
+            return false
+        }
+
+        return indexPath.row >= groupedSites.numberOfItemsForSection(indexPath.section - 1) - 1
+    }
+}
+
+extension HistoryPanel: HomePanelContextMenu {
+    func presentContextMenu(for site: Site, with indexPath: IndexPath, completionHandler: @escaping () -> PhotonActionSheet?) {
+        guard let contextMenu = completionHandler() else { return }
+        present(contextMenu, animated: true, completion: nil)
+    }
+
+    func getSiteDetails(for indexPath: IndexPath) -> Site? {
+        return siteForIndexPath(indexPath)
+    }
+
+    func getContextMenuActions(for site: Site, with indexPath: IndexPath) -> [PhotonActionSheetItem]? {
+        guard var actions = getDefaultContextMenuActions(for: site, homePanelDelegate: homePanelDelegate) else { return nil }
+
+        let removeAction = PhotonActionSheetItem(title: Strings.DeleteFromHistoryContextMenuTitle, iconString: "action_delete", handler: { action in
+            self.removeHistoryForURLAtIndexPath(indexPath: indexPath)
+        })
+
+        let pinTopSite = PhotonActionSheetItem(title: Strings.PinTopsiteActionTitle, iconString: "action_pin", handler: { action in
+            self.pinToTopSites(site)
+        })
+        actions.append(pinTopSite)
+        actions.append(removeAction)
+        return actions
     }
 }

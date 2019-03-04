@@ -4,6 +4,7 @@
 
 import Shared
 import UIKit
+import Deferred
 
 /* The base favicons protocol */
 public protocol Favicons {
@@ -12,10 +13,10 @@ public protocol Favicons {
     /**
      * Returns the ID of the added favicon.
      */
-    func addFavicon(icon: Favicon) -> Deferred<Maybe<Int>>
+    func addFavicon(_ icon: Favicon) -> Deferred<Maybe<Int>>
 
     /**
      * Returns the ID of the added favicon.
      */
-    func addFavicon(icon: Favicon, forSite site: Site) -> Deferred<Maybe<Int>>
+    @discardableResult func addFavicon(_ icon: Favicon, forSite site: Site) -> Deferred<Maybe<Int>>
 }

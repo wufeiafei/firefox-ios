@@ -2,18 +2,7 @@
   "images" : [
     {
       "idiom" : "universal",
-      "scale" : "1x",
-      "filename" : "AddToReadingListCircle.png"
-    },
-    {
-      "idiom" : "universal",
-      "scale" : "2x",
-      "filename" : "AddToReadingListCircle@2x.png"
-    },
-    {
-      "idiom" : "universal",
-      "scale" : "3x",
-      "filename" : "AddToReadingListCircle@3x.png"
+      "filename" : "reading-list-add.pdf"
     }
   ],
   "info" : {

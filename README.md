@@ -1,12 +1,20 @@
-Firefox for iOS
+Firefox for iOS [![codebeat badge](https://codebeat.co/badges/67e58b6d-bc89-4f22-ba8f-7668a9c15c5a)](https://codebeat.co/projects/github-com-mozilla-firefox-ios) [![BuddyBuild](https://dashboard.buddybuild.com/api/statusImage?appID=57bf25c0f096bc01001e21e0&branch=master&build=latest)](https://dashboard.buddybuild.com/apps/57bf25c0f096bc01001e21e0/build/latest) [![codecov](https://codecov.io/gh/mozilla-mobile/firefox-ios/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-mobile/firefox-ios/branch/master)
 ===============
 
-This branch
+Download on the [App Store](https://itunes.apple.com/app/firefox-web-browser/id989804926).
+
+This branch (master)
 -----------
 
-This branch is targeting iOS 9, uses Swift 2.0, and is slated to become v1.1 and later. See the __v1.0__ branch if you're doing work for a 1.0.\* release.
+This branch is for mainline development that will ship in *v15.0*.
+
+This branch only works with Xcode 10.0 and supports iOS 10.3 and above
+
+This branch is written in Swift 4.2
 
 Please make sure you aim your pull requests in the right direction.
+
+For bug fixes and features for a specific release use the version branch.
 
 Getting involved
 ----------------
@@ -17,42 +25,69 @@ We encourage you to participate in this open source project. We love Pull Reques
 * Mailing list:   [mobile-firefox-dev@mozilla.org](https://mail.mozilla.org/listinfo/mobile-firefox-dev).
 * Bugs:           [File a new bug](https://bugzilla.mozilla.org/enter_bug.cgi?bug_file_loc=http%3A%2F%2F&bug_ignored=0&op_sys=iOS%20&product=Firefox%20for%20iOS&rep_platform=All) • [Existing bugs](https://bugzilla.mozilla.org/describecomponents.cgi?product=Firefox%20for%20iOS)
 
-This is a work in progress on some early ideas.  Don't get too attached to this code. Tomorrow everything will be different.
+Want to contribute but don't know where to start? Here is a list of [Good First Bugs.](http://www.joshmatthews.net/bugsahoy/?mobileios=1&simple=1)
 
 Likewise, the design and UX is still in flux. Don't get attached to them. They will change tomorrow!
-https://mozilla.invisionapp.com/share/HA254M642#/screens/63057282?maintainScrollPosition=false
 
 *GitHub issues are enabled* on this repository, but we encourage you to file a bug (see above). We'll accept issues to track work items that don't yet have a pull request, and also as an early funnel for bug reports, but Bugzilla is the source of truth for lots of good reasons — issues will be shifted into Bugzilla, and pull requests need a bug number.
 
 Building the code
 -----------------
 
-> __As of August 28, 2015, this project requires Xcode 7 beta 6.__
+> __As of Oct 2018, this project requires Xcode 10.__
 
 1. Install the latest [Xcode developer tools](https://developer.apple.com/xcode/downloads/) from Apple.
-1. Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage).
+1. Install Carthage
+    ```shell
+    brew update
+    brew install carthage
+    ```
 1. Clone the repository:
-
-  ```shell
-  git clone https://github.com/mozilla/firefox-ios
-  ```
-
+    ```shell
+    git clone https://github.com/mozilla-mobile/firefox-ios
+    ```
 1. Pull in the project dependencies:
-
-  ```shell
-  cd firefox-ios
-  sh ./checkout.sh
-  ```
-
+    ```shell
+    cd firefox-ios
+    sh ./bootstrap.sh
+    ```
 1. Open `Client.xcodeproj` in Xcode.
-1. Build the `Client` scheme in Xcode.
+1. Build the `Fennec` scheme in Xcode.
 
-It is possible to use [App Code](https://www.jetbrains.com/objc/download/) instead of Xcode, but you will still require the Xcode developer tools.
+## Building User Scripts
+
+User Scripts (JavaScript injected into the `WKWebView`) are compiled, concatenated and minified using [webpack](https://webpack.js.org/). User Scripts to be aggregated are placed in the following directories:
+
+```
+/Client
+|-- /Frontend
+    |-- /UserContent
+        |-- /UserScripts
+            |-- /AllFrames
+            |   |-- /AtDocumentEnd
+            |   |-- /AtDocumentStart
+            |-- /MainFrame
+                |-- /AtDocumentEnd
+                |-- /AtDocumentStart
+```
+
+This reduces the total possible number of User Scripts down to four. The compiled output from concatenating and minifying the User Scripts placed in these folders resides in `/Client/Assets` and are named accordingly:
+
+* `AllFramesAtDocumentEnd.js`
+* `AllFramesAtDocumentStart.js`
+* `MainFrameAtDocumentEnd.js`
+* `MainFrameAtDocumentStart.js`
+
+To simplify the build process, these compiled files are checked-in to this repository. When adding or editing User Scripts, these files can be re-compiled with `webpack` manually. This requires Node.js to be installed and all required `npm` packages can be installed by running `npm install` in the root directory of the project. User Scripts can be compiled by running the following `npm` command in the root directory of the project:
+
+```
+npm run build
+```
 
 ## Contributor guidelines
 
 ### Creating a pull request
-* All pull requests must be associated with a specific bug in [Bugzilla](http://bugzilla.mozilla.org).
+* All pull requests must be associated with a specific bug in [Bugzilla](https://bugzilla.mozilla.org/).
  * If a bug corresponding to the fix does not yet exist, please [file it](https://bugzilla.mozilla.org/enter_bug.cgi?op_sys=iOS&product=Firefox%20for%20iOS&rep_platform=All).
  * You'll need to be logged in to create/update bugs, but note that Bugzilla allows you to sign in with your GitHub account.
 * Use the bug number/title as the name of pull request. For example, a pull request for [bug 1135920](https://bugzilla.mozilla.org/show_bug.cgi?id=1135920) would be titled "Bug 1135920 - Create a top sites panel".
@@ -78,26 +113,3 @@ It is possible to use [App Code](https://www.jetbrains.com/objc/download/) inste
 * Each commit should have a single clear purpose. If a commit contains multiple unrelated changes, those changes should be split into separate commits.
 * If a commit requires another commit to build properly, those commits should be squashed.
 * Follow-up commits for any review comments should be squashed. Do not include "Fixed PR comments", merge commits, or other "temporary" commits in pull requests.
-
-Adding new dependencies with Carthage
--------------------------------------
-
-Notes from Stefan:
-
-Usually Carthage is used to compile frameworks and then include the (compiled) binary frameworks in your app. When you do this, the frameworks do not need to be signed by Carthage. Instead, at the end of building the your application, xcode will simply sign all the embedded resources, frameworks included. So as long as signing works for your app, it will work for frameworks imported with Carthage.
-
-But, because not all Carthage dependencies can be compiled to frameworks yet, we currently include them as source. This means they become dependent projects of our application, which in turn means that they are built *and signed* individually as part of the build process of our app.
-
-Now this is where it gets tricky. Because code signing on iOS can get really tedious to get right. Small mistakes in dependent projects can turn into issues about code signing identities, missing provisioning profiles, etc.
-
-For example:
-
-If a dependent project has a team identifier set, Xcode will complain that it cannot find signin identities of that team. It is best to set the team to None.
-
-If a dependent project is configured to use a Distribution Code Signing Identity for a Release build, Xcode will complain that such a profile is not available. (Since we only have development profiles on our workstations). It is best to configure both Debug and Release Build Configurations to use the automatic "iPhone Developer" Code Signing Identity. This will pick the right thing on your local build.
-
-Most of this is fixable and can be reported upstream.
-
-If you add a new dependency, ping @st3fan and he'll make sure things work correctly on our integration (xcode server) and dogfood builders.
-
-A command exists to make adding dependencies less painful: `./update.sh`.

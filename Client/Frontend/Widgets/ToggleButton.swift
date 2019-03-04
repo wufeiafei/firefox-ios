@@ -5,53 +5,52 @@
 import UIKit
 
 private struct UX {
-    static let TopColor = UIColor(red: 179 / 255, green: 83 / 255, blue: 253 / 255, alpha: 1)
-    static let BottomColor = UIColor(red: 146 / 255, green: 16 / 255, blue: 253, alpha: 1)
+    static let BackgroundColor = UIColor.Photon.Purple60
 
     // The amount of pixels the toggle button will expand over the normal size. This results in the larger -> contract animation.
     static let ExpandDelta: CGFloat = 5
-    static let ShowDuration: NSTimeInterval = 0.4
-    static let HideDuration: NSTimeInterval = 0.2
+    static let ShowDuration: TimeInterval = 0.4
+    static let HideDuration: TimeInterval = 0.2
 
     static let BackgroundSize = CGSize(width: 32, height: 32)
 }
 
 class ToggleButton: UIButton {
-    func setSelected(selected: Bool, animated: Bool = true) {
-        self.selected = selected
+    func setSelected(_ selected: Bool, animated: Bool = true) {
+        self.isSelected = selected
         if animated {
             animateSelection(selected)
         }
     }
 
-    private func updateMaskPathForSelectedState(selected: Bool) {
-        let path = CGPathCreateMutable()
+    fileprivate func updateMaskPathForSelectedState(_ selected: Bool) {
+        let path = CGMutablePath()
         if selected {
-            var rect = CGRect(origin: CGPointZero, size: UX.BackgroundSize)
+            var rect = CGRect(size: UX.BackgroundSize)
             rect.center = maskShapeLayer.position
-            CGPathAddEllipseInRect(path, nil, rect)
+            path.addEllipse(in: rect)
         } else {
-            CGPathAddEllipseInRect(path, nil, CGRect(origin: maskShapeLayer.position, size: CGSizeZero))
+            path.addEllipse(in: CGRect(origin: maskShapeLayer.position, size: .zero))
         }
         self.maskShapeLayer.path = path
     }
 
-    private func animateSelection(selected: Bool) {
-        var endFrame = CGRect(origin: CGPointZero, size: UX.BackgroundSize)
+    fileprivate func animateSelection(_ selected: Bool) {
+        var endFrame = CGRect(size: UX.BackgroundSize)
         endFrame.center = maskShapeLayer.position
 
         if selected {
             let animation = CAKeyframeAnimation(keyPath: "path")
 
-            let startPath = CGPathCreateMutable()
-            CGPathAddEllipseInRect(startPath, nil, CGRect(origin: maskShapeLayer.position, size: CGSizeZero))
+            let startPath = CGMutablePath()
+            startPath.addEllipse(in: CGRect(origin: maskShapeLayer.position, size: .zero))
 
-            let largerPath = CGPathCreateMutable()
-            let largerBounds = CGRectInset(endFrame, -UX.ExpandDelta, -UX.ExpandDelta)
-            CGPathAddEllipseInRect(largerPath, nil, largerBounds)
+            let largerPath = CGMutablePath()
+            let largerBounds = endFrame.insetBy(dx: -UX.ExpandDelta, dy: -UX.ExpandDelta)
+            largerPath.addEllipse(in: largerBounds)
 
-            let endPath = CGPathCreateMutable()
-            CGPathAddEllipseInRect(endPath, nil, endFrame)
+            let endPath = CGMutablePath()
+            endPath.addEllipse(in: endFrame)
 
             animation.timingFunction = CAMediaTimingFunction(name: kCAMediaTimingFunctionEaseOut)
             animation.values = [
@@ -61,63 +60,63 @@ class ToggleButton: UIButton {
             ]
             animation.duration = UX.ShowDuration
             self.maskShapeLayer.path = endPath
-            self.maskShapeLayer.addAnimation(animation, forKey: "grow")
+            self.maskShapeLayer.add(animation, forKey: "grow")
         } else {
             let animation = CABasicAnimation(keyPath: "path")
             animation.duration = UX.HideDuration
             animation.fillMode = kCAFillModeForwards
 
-            let fromPath = CGPathCreateMutable()
-            CGPathAddEllipseInRect(fromPath, nil, endFrame)
+            let fromPath = CGMutablePath()
+            fromPath.addEllipse(in: endFrame)
             animation.fromValue = fromPath
             animation.timingFunction = CAMediaTimingFunction(name: kCAMediaTimingFunctionEaseInEaseOut)
 
-            let toPath = CGPathCreateMutable()
-            CGPathAddEllipseInRect(toPath, nil, CGRect(origin: self.maskShapeLayer.bounds.center, size: CGSizeZero))
+            let toPath = CGMutablePath()
+            toPath.addEllipse(in: CGRect(origin: self.maskShapeLayer.bounds.center, size: .zero))
 
             self.maskShapeLayer.path = toPath
-            self.maskShapeLayer.addAnimation(animation, forKey: "shrink")
+            self.maskShapeLayer.add(animation, forKey: "shrink")
         }
     }
 
-    lazy private var backgroundView: UIView = {
+    lazy fileprivate var backgroundView: UIView = {
         let view = UIView()
-        view.userInteractionEnabled = false
-        view.layer.addSublayer(self.gradientLayer)
+        view.isUserInteractionEnabled = false
+        view.layer.addSublayer(self.backgroundLayer)
         return view
     }()
 
-    lazy private var maskShapeLayer: CAShapeLayer = {
+    lazy fileprivate var maskShapeLayer: CAShapeLayer = {
         let circle = CAShapeLayer()
         return circle
     }()
 
-    lazy private var gradientLayer: CAGradientLayer = {
-        let gradientLayer = CAGradientLayer()
-        gradientLayer.colors = [UX.TopColor.CGColor, UX.BottomColor.CGColor]
-        gradientLayer.mask = self.maskShapeLayer
-        return gradientLayer
+    lazy fileprivate var backgroundLayer: CALayer = {
+        let backgroundLayer = CALayer()
+        backgroundLayer.backgroundColor = UX.BackgroundColor.cgColor
+        backgroundLayer.mask = self.maskShapeLayer
+        return backgroundLayer
     }()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        contentMode = UIViewContentMode.Redraw
+        contentMode = .redraw
         insertSubview(backgroundView, belowSubview: imageView!)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let zeroFrame = CGRect(origin: CGPointZero, size: frame.size)
+        let zeroFrame = CGRect(size: frame.size)
         backgroundView.frame = zeroFrame
 
         // Make the gradient larger than normal to allow the mask transition to show when it blows up
         // a little larger than the resting size
-        gradientLayer.bounds = CGRectInset(backgroundView.frame, -UX.ExpandDelta, -UX.ExpandDelta)
+        backgroundLayer.bounds = backgroundView.frame.insetBy(dx: -UX.ExpandDelta, dy: -UX.ExpandDelta)
         maskShapeLayer.bounds = backgroundView.frame
-        gradientLayer.position = CGPoint(x: CGRectGetMidX(zeroFrame), y: CGRectGetMidY(zeroFrame))
-        maskShapeLayer.position = CGPoint(x: CGRectGetMidX(zeroFrame), y: CGRectGetMidY(zeroFrame))
+        backgroundLayer.position = CGPoint(x: zeroFrame.midX, y: zeroFrame.midY)
+        maskShapeLayer.position = CGPoint(x: zeroFrame.midX, y: zeroFrame.midY)
 
-        updateMaskPathForSelectedState(selected)
+        updateMaskPathForSelectedState(isSelected)
     }
 
     required init?(coder aDecoder: NSCoder) {
