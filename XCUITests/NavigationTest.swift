@@ -96,15 +96,14 @@ class NavigationTest: BaseTestCase {
     }
 
     func testTapSignInShowsFxAFromRemoteTabPanel() {
-        //navigator.goto(HomePanel_TopSites)
         // Open FxAccount from remote tab panel and check the Sign in to Firefox scren
-        navigator.goto(HomePanel_History)
+        navigator.goto(LibraryPanel_History)
         XCTAssertTrue(app.tables["History List"].staticTexts["Synced Devices"].isEnabled)
         app.tables["History List"].staticTexts["Synced Devices"].tap()
         app.tables.buttons["Sign in to Sync"].tap()
         checkFirefoxSyncScreenShown()
         app.navigationBars["Client.FxAContentView"].buttons["Done"].tap()
-        navigator.nowAt(HomePanel_History)
+        navigator.nowAt(LibraryPanel_History)
     }
 
     private func checkFirefoxSyncScreenShown() {
@@ -416,7 +415,7 @@ class NavigationTest: BaseTestCase {
         XCTAssertTrue(app.tables["Context Menu"].cells["download"].exists)
         app.tables["Context Menu"].cells["download"].tap()
         navigator.goto(BrowserTabMenu)
-        navigator.goto(HomePanel_Downloads)
+        navigator.goto(LibraryPanel_Downloads)
         waitForExistence(app.tables["DownloadsTable"])
         // There should be one item downloaded. It's name and size should be shown
         let downloadedList = app.tables["DownloadsTable"].cells.count
@@ -499,5 +498,18 @@ class NavigationTest: BaseTestCase {
         app.links["Visit site anyway"].tap()
         waitForExistence(app.webViews.otherElements["expired.badssl.com"], timeout: 10)
         XCTAssertTrue(app.webViews.otherElements["expired.badssl.com"].exists)
+    }
+
+    // In this test, the parent window opens a child and in the child it creates a fake link 'link-created-by-parent'
+    func testWriteToChildPopupTab() {
+        navigator.goto(SettingsScreen)
+        waitForExistence(app.tables["AppSettingsTableViewController.tableView"])
+        let switchBlockPopUps = app.tables.cells.switches["blockPopups"]
+        switchBlockPopUps.tap()
+        let switchValueAfter = switchBlockPopUps.value!
+        XCTAssertEqual(switchValueAfter as? String, "0")
+        navigator.goto(BrowserTab)
+        navigator.openURL(path(forTestPage: "test-window-opener.html"))
+        waitForExistence(app.links["link-created-by-parent"], timeout: 10)
     }
  }

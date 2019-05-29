@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "0940"
+   LastUpgradeVersion = "1020"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -167,7 +167,7 @@
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Fennec_Enterprise"
+      buildConfiguration = "Fennec"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       language = "en"
@@ -317,7 +317,16 @@
                   Identifier = "DragAndDropTestIpad">
                </Test>
                <Test
-                  Identifier = "DragAndDropTests">
+                  Identifier = "DragAndDropTests/testDragAndDropHomeTabTabsTray()">
+               </Test>
+               <Test
+                  Identifier = "DragAndDropTests/testRearrangeMoreThan3TabsTabTray()">
+               </Test>
+               <Test
+                  Identifier = "DragAndDropTests/testRearrangeTabsPrivateModeTabTray()">
+               </Test>
+               <Test
+                  Identifier = "DragAndDropTests/testRearrangeTabsTabTrayLandscape()">
                </Test>
                <Test
                   Identifier = "FindInPageTests/testBarDissapearsWhenOpeningTabsTray()">
@@ -365,6 +374,9 @@
                   Identifier = "HistoryTests/testClearHistoryFromSettings()">
                </Test>
                <Test
+                  Identifier = "HistoryTests/testClearRecentHistory()">
+               </Test>
+               <Test
                   Identifier = "HistoryTests/testClearRecentlyClosedHistory()">
                </Test>
                <Test
@@ -402,6 +414,15 @@
                </Test>
                <Test
                   Identifier = "IntegrationTests/testFxASyncBookmark()">
+               </Test>
+               <Test
+                  Identifier = "LibraryTest">
+               </Test>
+               <Test
+                  Identifier = "LibraryTestsIpad">
+               </Test>
+               <Test
+                  Identifier = "LibraryTestsIphone">
                </Test>
                <Test
                   Identifier = "MailAppSettingsTests">
@@ -459,6 +480,9 @@
                </Test>
                <Test
                   Identifier = "NewTabSettingsTest/testChangeNewTabSettingsLabel()">
+               </Test>
+               <Test
+                  Identifier = "NewTabSettingsTest/testChangeNewTabSettingsShowFirefoxHome()">
                </Test>
                <Test
                   Identifier = "NewTabSettingsTest/testToggleOffOnAdditionalContentBookmarks()">
@@ -534,6 +558,12 @@
                </Test>
                <Test
                   Identifier = "SaveLoginTest/testEditOneLoginEntry()">
+               </Test>
+               <Test
+                  Identifier = "SaveLoginTest/testLoginsListFromBrowserTabMenu()">
+               </Test>
+               <Test
+                  Identifier = "SaveLoginTest/testPasscodeLoginsListFromBrowserTabMenu()">
                </Test>
                <Test
                   Identifier = "SaveLoginTest/testSaveLogin()">
@@ -708,7 +738,7 @@
       </AdditionalOptions>
    </TestAction>
    <LaunchAction
-      buildConfiguration = "Fennec_Enterprise"
+      buildConfiguration = "Fennec"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "1"
@@ -738,7 +768,7 @@
       </AdditionalOptions>
    </LaunchAction>
    <ProfileAction
-      buildConfiguration = "Fennec_Enterprise"
+      buildConfiguration = "Fennec"
       shouldUseLaunchSchemeArgsEnv = "YES"
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
@@ -755,10 +785,10 @@
       </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
-      buildConfiguration = "Fennec_Enterprise">
+      buildConfiguration = "Fennec">
    </AnalyzeAction>
    <ArchiveAction
-      buildConfiguration = "Fennec_Enterprise"
+      buildConfiguration = "Fennec"
       revealArchiveInOrganizer = "YES">
       <PreActions>
          <ExecutionAction

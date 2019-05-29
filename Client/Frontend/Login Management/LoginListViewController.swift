@@ -7,14 +7,13 @@ import SnapKit
 import Storage
 import Shared
 import SwiftKeychainWrapper
-import Deferred
 
 private struct LoginListUX {
     static let RowHeight: CGFloat = 58
     static let SearchHeight: CGFloat = 58
     static let selectionButtonFont = UIFont.systemFont(ofSize: 16)
-    static let NoResultsFont: UIFont = UIFont.systemFont(ofSize: 16)
-    static let NoResultsTextColor: UIColor = UIColor.Photon.Grey40
+    static let NoResultsFont = UIFont.systemFont(ofSize: 16)
+    static let NoResultsTextColor = UIColor.Photon.Grey40
 }
 
 private extension UITableView {
@@ -76,12 +75,8 @@ class LoginListViewController: SensitiveViewController {
     static func create(authenticateInNavigationController navigationController: UINavigationController, profile: Profile, settingsDelegate: SettingsDelegate) -> Deferred<LoginListViewController?> {
         let deferred = Deferred<LoginListViewController?>()
 
-        func fillDeferred(ok: Bool, showingAuthDialog: Bool = true) {
+        func fillDeferred(ok: Bool) {
             if ok {
-                if showingAuthDialog {
-                    navigationController.dismiss(animated: true)
-                }
-
                 LeanPlumClient.shared.track(event: .openedLogins)
                 let viewController = LoginListViewController(profile: profile)
                 viewController.settingsDelegate = settingsDelegate
@@ -92,7 +87,7 @@ class LoginListViewController: SensitiveViewController {
         }
 
         guard let authInfo = KeychainWrapper.sharedAppContainerKeychain.authenticationInfo(), authInfo.requiresValidation() else {
-            fillDeferred(ok: true, showingAuthDialog: false)
+            fillDeferred(ok: true)
             return deferred
         }
 
@@ -102,6 +97,11 @@ class LoginListViewController: SensitiveViewController {
             fillDeferred(ok: false)
         }, fallback: {
             AppAuthenticator.presentPasscodeAuthentication(navigationController).uponQueue(.main) { isOk in
+                if isOk {
+                    // In the success case of the passcode dialog, it requires explicit dismissal to continue
+                    navigationController.dismiss(animated: true)
+                }
+
                 fillDeferred(ok: isOk)
             }
         })
@@ -139,10 +139,12 @@ class LoginListViewController: SensitiveViewController {
         navigationItem.hidesSearchBarWhenScrolling = false
         navigationItem.searchController = searchController
         definesPresentationContext = true
+        // No need to hide the navigation bar on iPad to make room, and hiding makes the search bar too close to the top
+        searchController.hidesNavigationBarDuringPresentation = UIDevice.current.userInterfaceIdiom != .pad
 
         let notificationCenter = NotificationCenter.default
         notificationCenter.addObserver(self, selector: #selector(remoteLoginsDidChange), name: .DataRemoteLoginChangesWereApplied, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(dismissAlertController), name: .UIApplicationDidEnterBackground, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(dismissAlertController), name: UIApplication.didEnterBackgroundNotification, object: nil)
 
         setupDefaultNavButtons()
         view.addSubview(tableView)
@@ -390,7 +392,7 @@ extension LoginListViewController: UITableViewDelegate {
         return indexPath.section == LoginsSettingsSection ? 44 : LoginListUX.RowHeight
     }
 
-    func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCellEditingStyle {
+    func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
         return .none
     }
 
@@ -480,7 +482,7 @@ fileprivate class ListSelectionController: NSObject {
 
     func deselectIndexPath(_ indexPath: IndexPath) {
         guard let foundSelectedPath = (selectedIndexPaths.filter { $0.row == indexPath.row && $0.section == indexPath.section }).first,
-              let indexToRemove = selectedIndexPaths.index(of: foundSelectedPath) else {
+              let indexToRemove = selectedIndexPaths.firstIndex(of: foundSelectedPath) else {
             return
         }
 
@@ -551,8 +553,7 @@ class LoginDataSource: NSObject, UITableViewDataSource {
     }
 
     @objc func numberOfSections(in tableView: UITableView) -> Int {
-        let searchActive = searchController?.isActive ?? false
-        if !searchActive && loginRecordSections.isEmpty {
+        if  loginRecordSections.isEmpty {
             tableView.backgroundView = emptyStateView
             tableView.separatorStyle = .none
             return 1
@@ -599,6 +600,9 @@ class LoginDataSource: NSObject, UITableViewDataSource {
             cell.detailTextLabel?.text = login.username
             cell.accessoryType = .disclosureIndicator
         }
+        
+        // Need to override the default background multi-select color to support theming
+        cell.multipleSelectionBackgroundView = UIView()
         cell.applyTheme()
         return cell
     }

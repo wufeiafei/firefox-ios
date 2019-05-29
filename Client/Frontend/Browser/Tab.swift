@@ -144,9 +144,16 @@ class Tab: NSObject {
     /// The last title shown by this tab. Used by the tab tray to show titles for zombie tabs.
     var lastTitle: String?
 
-    /// Whether or not the desktop site was requested with the last request, reload or navigation. Note that this property needs to
-    /// be managed by the web view's navigation delegate.
-    var desktopSite: Bool = false
+    /// Whether or not the desktop site was requested with the last request, reload or navigation.
+    var desktopSite: Bool = false {
+        didSet {
+            webView?.customUserAgent = desktopSite ? UserAgent.desktopUserAgent() : nil
+
+            if desktopSite != oldValue {
+                TabEvent.post(.didToggleDesktopMode, for: self)
+            }
+        }
+    }
 
     var readerModeAvailableOrActive: Bool {
         if let readerMode = self.getContentScript(name: "ReaderMode") as? ReaderMode {
@@ -298,13 +305,13 @@ class Tab: NSObject {
     }
 
     func closeAndRemovePrivateBrowsingData() {
+        contentScriptManager.uninstall(tab: self)
+
         webView?.removeObserver(self, forKeyPath: KVOConstants.URL.rawValue)
 
         if let webView = webView {
             tabDelegate?.tab?(self, willDeleteWebView: webView)
         }
-
-        contentScriptManager.helpers.removeAll()
 
         if isPrivate {
             removeAllBrowsingData()
@@ -346,7 +353,9 @@ class Tab: NSObject {
     var historyList: [URL] {
         func listToUrl(_ item: WKBackForwardListItem) -> URL { return item.url }
         var tabs = self.backList?.map(listToUrl) ?? [URL]()
-        tabs.append(self.url!)
+        if let url = url {
+            tabs.append(url)
+        }
         return tabs
     }
 
@@ -362,7 +371,12 @@ class Tab: NSObject {
         // When picking a display title. Tabs with sessionData are pending a restore so show their old title.
         // To prevent flickering of the display title. If a tab is restoring make sure to use its lastTitle.
         if let url = self.url, InternalURL(url)?.isAboutHomeURL ?? false, sessionData == nil, !restoring {
-            return ""
+            return Strings.AppMenuOpenHomePageTitleString
+        }
+
+        //lets double check the sessionData in case this is a non-restored new tab
+        if let firstURL = sessionData?.urls.first, sessionData?.urls.count == 1,  InternalURL(firstURL)?.isAboutHomeURL ?? false {
+            return Strings.AppMenuOpenHomePageTitleString
         }
 
         guard let lastTitle = lastTitle, !lastTitle.isEmpty else {
@@ -476,7 +490,7 @@ class Tab: NSObject {
     }
 
     func removeSnackbar(_ bar: SnackBar) {
-        if let index = bars.index(of: bar) {
+        if let index = bars.firstIndex(of: bar) {
             bars.remove(at: index)
             tabDelegate?.tab(self, didRemoveSnackbar: bar)
         }
@@ -506,6 +520,7 @@ class Tab: NSObject {
     func toggleDesktopSite() {
         desktopSite = !desktopSite
         reload()
+        TabEvent.post(.didToggleDesktopMode, for: self)
     }
 
     func queueJavascriptAlertPrompt(_ alert: JSAlertInfo) {
@@ -532,10 +547,6 @@ class Tab: NSObject {
         }
         guard let url = self.webView?.url else {
             return
-        }
-
-        if let helper = contentScriptManager.getContentScript(ContextMenuHelper.name()) as? ContextMenuHelper {
-                helper.replaceWebViewLongPress()
         }
 
         self.urlDidChangeDelegate?.tab(self, urlDidChangeTo: url)
@@ -598,15 +609,22 @@ extension Tab: ContentBlockerTab {
 }
 
 private class TabContentScriptManager: NSObject, WKScriptMessageHandler {
-    fileprivate var helpers = [String: TabContentScript]()
+    private var helpers = [String: TabContentScript]()
+
+    // Without calling this, the TabContentScriptManager will leak.
+    func uninstall(tab: Tab) {
+        helpers.forEach { helper in
+            if let name = helper.value.scriptMessageHandlerName() {
+                tab.webView?.configuration.userContentController.removeScriptMessageHandler(forName: name)
+            }
+        }
+    }
 
     @objc func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         for helper in helpers.values {
-            if let scriptMessageHandlerName = helper.scriptMessageHandlerName() {
-                if scriptMessageHandlerName == message.name {
-                    helper.userContentController(userContentController, didReceiveScriptMessage: message)
-                    return
-                }
+            if let scriptMessageHandlerName = helper.scriptMessageHandlerName(), scriptMessageHandlerName == message.name {
+                helper.userContentController(userContentController, didReceiveScriptMessage: message)
+                return
             }
         }
     }
@@ -673,6 +691,58 @@ class TabWebView: WKWebView, MenuHelperInterface {
     }
 }
 
+// Desktop site host list management.
+extension Tab {
+    // Store the list of hosts as an xcarchive for simplicity.
+    struct DesktopSites {
+        // Track these in-memory only
+        static var privateModeHostList = Set<String>()
+
+        static let file: URL = {
+            let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            return root.appendingPathComponent("desktop-sites-set-of-strings.xcarchive")
+        } ()
+
+        static var hostList: Set<String> = {
+            if let hosts = NSKeyedUnarchiver.unarchiveObject(withFile: DesktopSites.file.path) as? Set<String> {
+                return hosts
+            }
+            return Set<String>()
+        } ()
+
+        // Will extract the host from the URL and enable or disable it as a desktop site, and write the file if needed.
+        static func updateHosts(forUrl url: URL, isDesktopSite: Bool, isPrivate: Bool) {
+            guard let host = url.host, !host.isEmpty else { return }
+
+            if isPrivate {
+                if isDesktopSite {
+                    DesktopSites.privateModeHostList.insert(host)
+                    return
+                } else {
+                    DesktopSites.privateModeHostList.remove(host)
+                    // Continue to next section and try remove it from `hostList` also.
+                }
+            }
+
+            if isDesktopSite, !hostList.contains(host) {
+                hostList.insert(host)
+            } else if !isDesktopSite, hostList.contains(host) {
+                hostList.remove(host)
+            } else {
+                // Don't save to disk, return early
+                return
+            }
+
+            // At this point, saving to disk takes place.
+            do {
+                let data = try NSKeyedArchiver.archivedData(withRootObject: hostList, requiringSecureCoding: false)
+                try data.write(to: DesktopSites.file)
+            } catch {
+                print("Couldn't write file: \(error)")
+            }
+        }
+    }
+}
 ///
 // Temporary fix for Bug 1390871 - NSInvalidArgumentException: -[WKContentView menuHelperFindInPage]: unrecognized selector
 //

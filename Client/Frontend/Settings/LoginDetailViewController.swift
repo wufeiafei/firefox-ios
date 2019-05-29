@@ -22,7 +22,16 @@ enum InfoItem: Int {
 private struct LoginDetailUX {
     static let InfoRowHeight: CGFloat = 58
     static let DeleteRowHeight: CGFloat = 44
-    static let SeparatorHeight: CGFloat = 44
+    static let SeparatorHeight: CGFloat = 84
+}
+
+fileprivate class CenteredDetailCell: ThemedTableViewCell {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        var f = detailTextLabel?.frame ?? CGRect()
+        f.center = frame.center
+        detailTextLabel?.frame = f
+    }
 }
 
 class LoginDetailViewController: SensitiveViewController {
@@ -42,21 +51,20 @@ class LoginDetailViewController: SensitiveViewController {
         }
     }
 
-    fileprivate var editingInfo: Bool = false {
+    fileprivate var isEditingFieldData: Bool = false {
         didSet {
-            if editingInfo != oldValue {
+            if isEditingFieldData != oldValue {
                 tableView.reloadData()
             }
         }
     }
-
 
     init(profile: Profile, login: LoginRecord) {
         self.login = login
         self.profile = profile
         super.init(nibName: nil, bundle: nil)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(dismissAlertController), name: .UIApplicationDidEnterBackground, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(dismissAlertController), name: UIApplication.didEnterBackgroundNotification, object: nil)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -132,7 +140,7 @@ extension LoginDetailViewController: UITableViewDataSource {
             loginCell.descriptionLabel.text = login.username
             loginCell.descriptionLabel.keyboardType = .emailAddress
             loginCell.descriptionLabel.returnKeyType = .next
-            loginCell.editingDescription = editingInfo
+            loginCell.isEditingFieldData = isEditingFieldData
             usernameField = loginCell.descriptionLabel
             usernameField?.accessibilityIdentifier = "usernameField"
             return loginCell
@@ -143,7 +151,7 @@ extension LoginDetailViewController: UITableViewDataSource {
             loginCell.descriptionLabel.text = login.password
             loginCell.descriptionLabel.returnKeyType = .default
             loginCell.displayDescriptionAsPassword = true
-            loginCell.editingDescription = editingInfo
+            loginCell.isEditingFieldData = isEditingFieldData
             passwordField = loginCell.descriptionLabel
             passwordField?.accessibilityIdentifier = "passwordField"
             return loginCell
@@ -154,15 +162,23 @@ extension LoginDetailViewController: UITableViewDataSource {
             loginCell.descriptionLabel.text = login.hostname
             websiteField = loginCell.descriptionLabel
             websiteField?.accessibilityIdentifier = "websiteField"
+            loginCell.isEditingFieldData = false
+            if isEditingFieldData {
+                loginCell.contentView.alpha = 0.5
+            }
             return loginCell
 
         case .lastModifiedSeparator:
-            let cell = ThemedTableViewCell(style: .subtitle, reuseIdentifier: nil)
-            let lastModified = NSLocalizedString("Last modified %@", tableName: "LoginManager", comment: "Footer label describing when the current login was last modified with the timestamp as the parameter.")
-            let t = UInt64(login.timePasswordChanged)
-            let formattedLabel = String(format: lastModified, Date.fromTimestamp(t).toRelativeTimeString())
+            let cell = CenteredDetailCell(style: .subtitle, reuseIdentifier: nil)
+            let created = NSLocalizedString("Created %@", tableName: "LoginManager", comment: "Label describing when the current login was created with the timestamp as the parameter.")
+            let lastModified = NSLocalizedString("Modified %@", tableName: "LoginManager", comment: "Label describing when the current login was last modified with the timestamp as the parameter.")
+
+            let lastModifiedFormatted = String(format: lastModified, Date.fromTimestamp(UInt64(login.timePasswordChanged)).toRelativeTimeString(dateStyle: .medium))
+            let createdFormatted = String(format: created, Date.fromTimestamp(UInt64(login.timeCreated)).toRelativeTimeString(dateStyle: .medium, timeStyle: .none))
             // Setting only the detail text produces smaller text as desired, and it is centered.
-            cell.detailTextLabel?.text = formattedLabel
+            cell.detailTextLabel?.text = createdFormatted + "\n" + lastModifiedFormatted
+            cell.detailTextLabel?.numberOfLines = 2
+            cell.detailTextLabel?.textAlignment = .center
             cell.backgroundColor = view.backgroundColor
             return cell
 
@@ -171,7 +187,7 @@ extension LoginDetailViewController: UITableViewDataSource {
             deleteCell.textLabel?.text = NSLocalizedString("Delete", tableName: "LoginManager", comment: "Label for the button used to delete the current login.")
             deleteCell.textLabel?.textAlignment = .center
             deleteCell.textLabel?.textColor = UIColor.theme.general.destructiveRed
-            deleteCell.accessibilityTraits = UIAccessibilityTraitButton
+            deleteCell.accessibilityTraits = UIAccessibilityTraits.button
             deleteCell.backgroundColor = UIColor.theme.tableView.rowBackground
             return deleteCell
         }
@@ -219,7 +235,7 @@ extension LoginDetailViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         if indexPath == InfoItem.deleteItem.indexPath {
             deleteLogin()
-        } else if !editingInfo {
+        } else if !isEditingFieldData {
             showMenuOnSingleTap(forIndexPath: indexPath)
         }
         tableView.deselectRow(at: indexPath, animated: true)
@@ -282,16 +298,14 @@ extension LoginDetailViewController {
     }
 
     @objc func edit() {
-        editingInfo = true
-
-        let cell = tableView.cellForRow(at: InfoItem.usernameItem.indexPath) as! LoginTableViewCell
+        isEditingFieldData = true
+        guard let cell = tableView.cellForRow(at: InfoItem.usernameItem.indexPath) as? LoginTableViewCell else { return }
         cell.descriptionLabel.becomeFirstResponder()
-
         navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(doneEditing))
     }
 
     @objc func doneEditing() {
-        editingInfo = false
+        isEditingFieldData = false
         navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .edit, target: self, action: #selector(edit))
 
         defer {
@@ -299,23 +313,20 @@ extension LoginDetailViewController {
             tableView.reloadData()
         }
 
-        // We only care to update if we changed something
-        guard let username = usernameField?.text,
-                  let password = passwordField?.text, username != login.username || password != login.password else {
-            return
-        }
+        // Only update if user made changes
+        guard let username = usernameField?.text, let password = passwordField?.text else { return }
+        guard username != login.username || password != login.password else { return }
 
         // Keep a copy of the old data in case we fail and need to revert back
-        let oldPassword = login.password
-        let oldUsername = login.username
+        let oldInfo = (pass: login.password, user: login.username)
         login.password = password
         login.username = username
 
         if login.isValid.isSuccess {
             _ = profile.logins.update(login: login)
-        } else if let oldUsername = oldUsername {
-            login.password = oldPassword
-            login.username = oldUsername
+        } else {
+            login.password = oldInfo.pass
+            login.username = oldInfo.user
         }
     }
 }

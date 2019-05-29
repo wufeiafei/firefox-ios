@@ -47,6 +47,14 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         showBackForwardList()
     }
 
+    func tabToolbarDidPressLibrary(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
+        if let libraryDrawerViewController = self.libraryDrawerViewController, libraryDrawerViewController.isOpen {
+            libraryDrawerViewController.close()
+        } else {
+            showLibrary()
+        }
+    }
+
     func tabToolbarDidPressMenu(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
         // ensure that any keyboards or spinners are dismissed before presenting the menu
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -61,7 +69,6 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
                 guard let loginsVC = loginsVC else { return }
                 loginsVC.shownFromAppMenu = true
                 let navController = ThemedNavigationController(rootViewController: loginsVC)
-                navController.modalPresentationStyle = .formSheet
                 self.present(navController, animated: true)
             }
         }

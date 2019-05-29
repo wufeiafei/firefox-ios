@@ -306,6 +306,21 @@ extension URL {
         }
         return self
     }
+    
+    public func isEqual(_ url: URL) -> Bool {
+        if self == url {
+            return true
+        }
+
+        // Try an additional equality case by chopping off the trailing slash
+        let urls: [String] = [url.absoluteString, absoluteString].map { item in
+            if let lastCh = item.last, lastCh == "/" {
+                return item.dropLast().lowercased()
+            }
+            return item.lowercased()
+        }
+        return urls[0] == urls[1]
+    }
 }
 
 // Extensions to deal with ReaderMode URLs
@@ -500,7 +515,7 @@ private extension URL {
         let tokens = host.components(separatedBy: ".")
         let tokenCount = tokens.count
         var suffix: String?
-        var previousDomain: String? = nil
+        var previousDomain: String?
         var currentDomain: String = host
 
         for offset in 0..<tokenCount {

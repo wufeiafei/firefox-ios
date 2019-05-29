@@ -5,7 +5,6 @@
 import Foundation
 import Shared
 import Storage
-import Deferred
 
 private let CancelButtonTitle = NSLocalizedString("Cancel", comment: "Label for Cancel button")
 private let LogInButtonTitle  = NSLocalizedString("Log in", comment: "Authentication prompt log in button")
@@ -59,7 +58,7 @@ class Authenticator {
             }
 
             let logins = cursor.asArray()
-            var credentials: URLCredential? = nil
+            var credentials: URLCredential?
 
             // It is possible that we might have duplicate entries since we match against host and scheme://host.
             // This is a side effect of https://bugzilla.mozilla.org/show_bug.cgi?id=1238103.

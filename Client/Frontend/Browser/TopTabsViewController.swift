@@ -83,7 +83,7 @@ class TopTabsViewController: UIViewController {
         tabDisplayManager = TabDisplayManager(collectionView: self.collectionView, tabManager: self.tabManager, tabDisplayer: self, reuseID: TopTabCell.Identifier)
         collectionView.dataSource = tabDisplayManager
         collectionView.delegate = tabLayoutDelegate
-        [UICollectionElementKindSectionHeader, UICollectionElementKindSectionFooter].forEach {
+        [UICollectionView.elementKindSectionHeader, UICollectionView.elementKindSectionFooter].forEach {
             collectionView.register(TopTabsHeaderFooter.self, forSupplementaryViewOfKind: $0, withReuseIdentifier: "HeaderFooter")
         }
     }
@@ -105,10 +105,8 @@ class TopTabsViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        if LeanPlumClient.shared.enableTabBarReorder.boolValue() {
-            collectionView.dragDelegate = tabDisplayManager
-            collectionView.dropDelegate = tabDisplayManager
-        }
+        collectionView.dragDelegate = tabDisplayManager
+        collectionView.dropDelegate = tabDisplayManager
 
         let topTabFader = TopTabFader()
         topTabFader.semanticContentAttribute = .forceLeftToRight
@@ -126,7 +124,7 @@ class TopTabsViewController: UIViewController {
 
         newTab.snp.makeConstraints { make in
             make.centerY.equalTo(view)
-            make.trailing.equalTo(tabsButton.snp.leading).offset(-10)
+            make.trailing.equalTo(tabsButton.snp.leading)
             make.size.equalTo(view.snp.height)
         }
         tabsButton.snp.makeConstraints { make in

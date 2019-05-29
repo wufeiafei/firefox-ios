@@ -82,9 +82,9 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
 
     override var keyCommands: [UIKeyCommand]? {
         return [
-            UIKeyCommand(input: UIKeyInputLeftArrow, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
-            UIKeyCommand(input: UIKeyInputRightArrow, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
-            UIKeyCommand(input: UIKeyInputEscape, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
+            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
+            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
+            UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(self.handleKeyCommand(sender:))),
             UIKeyCommand(input: copyShortcutKey, modifierFlags: .command, action: #selector(self.handleKeyCommand(sender:)))
         ]
     }
@@ -94,7 +94,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
             return
         }
         switch input {
-        case UIKeyInputLeftArrow:
+        case UIKeyCommand.inputLeftArrow:
             UnifiedTelemetry.recordEvent(category: .action, method: .press, object: .keyCommand, extras: ["action": "autocomplete-left-arrow"])
             if isSelectionActive {
                 applyCompletion()
@@ -112,7 +112,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
 
                 selectedTextRange = textRange(from: cursorPosition, to: cursorPosition)
             }
-        case UIKeyInputRightArrow:
+        case UIKeyCommand.inputRightArrow:
             UnifiedTelemetry.recordEvent(category: .action, method: .press, object: .keyCommand, extras: ["action": "autocomplete-right-arrow"])
             if isSelectionActive {
                 applyCompletion()
@@ -130,7 +130,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
 
                 selectedTextRange = textRange(from: cursorPosition, to: cursorPosition)
             }
-        case UIKeyInputEscape:
+        case UIKeyCommand.inputEscape:
             UnifiedTelemetry.recordEvent(category: .action, method: .press, object: .keyCommand, extras: ["action": "autocomplete-cancel"])
             autocompleteDelegate?.autocompleteTextFieldDidCancel(self)
         case copyShortcutKey:
@@ -180,10 +180,25 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
         return hasActiveCompletion
     }
 
+    @objc fileprivate func clear() {
+        text = ""
+        removeCompletion()
+        autocompleteDelegate?.autocompleteTextField(self, didEnterText: "")
+    }
+
     // `shouldChangeCharactersInRange` is called before the text changes, and textDidChange is called after.
     // Since the text has changed, remove the completion here, and textDidChange will fire the callback to
     // get the new autocompletion.
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        // This happens when you begin typing overtop the old highlighted
+        // text immediately after focusing the text field. We need to trigger
+        // a `didEnterText` that looks like a `clear()` so that the SearchLoader
+        // can reset itself since it will only lookup results if the new text is
+        // longer than the previous text.
+        if lastReplacement == nil {
+            autocompleteDelegate?.autocompleteTextField(self, didEnterText: "")
+        }
+
         lastReplacement = string
         return true
     }
@@ -206,7 +221,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
         let autocompleteText = NSMutableAttributedString(string: suggestionText)
 
         let color = AutocompleteTextField.textSelectionColor.labelMode
-        autocompleteText.addAttribute(NSAttributedStringKey.backgroundColor, value: color, range: NSRange(location: 0, length: suggestionText.count))
+        autocompleteText.addAttribute(NSAttributedString.Key.backgroundColor, value: color, range: NSRange(location: 0, length: suggestionText.count))
 
         autocompleteTextLabel?.removeFromSuperview() // should be nil. But just in case
         autocompleteTextLabel = createAutocompleteLabelWith(autocompleteText)
@@ -224,8 +239,8 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
             clearButton.snp.makeConstraints { make in
                 make.height.centerY.equalToSuperview()
                 make.width.equalTo(40)
-                // Without this offset, the button moves 5 pixels when switching from UILabel mode to UITextField mode
-                make.right.equalToSuperview().offset(5)
+                // Without this offset, the button moves when switching from UILabel mode to UITextField mode
+                make.right.equalToSuperview().offset(5.5)
             }
         }
     }
@@ -257,7 +272,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
         button.setImage(UIImage.templateImageNamed("topTabs-closeTabs"), for: .normal)
         button.tintColor = self.textColor
         button.backgroundColor = backgroundColor
-        button.addTarget(self, action: #selector(removeCompletion), for: .touchUpInside)
+        button.addTarget(self, action: #selector(clear), for: .touchUpInside)
         return button
     }
 
